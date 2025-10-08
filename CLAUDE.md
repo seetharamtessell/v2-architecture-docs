@@ -29,10 +29,21 @@ The system architecture is based on these core principles:
 docs/
 ├── 01-overview/          # System overview, key decisions, tech stack
 ├── 02-client/            # Client architecture (Tauri app)
-│   ├── frontend/         # UI layer
-│   ├── backend/          # Rust core components
-│   ├── storage/          # Local Qdrant + AWS estate cache
-│   └── sync/             # AWS data synchronization
+│   ├── overview.md       # Client architecture overview
+│   └── modules/          # Modular client architecture
+│       ├── storage-service/      ✅ Design Complete
+│       │   ├── architecture.md   # Overall design, components
+│       │   ├── api.md            # Complete Rust API reference
+│       │   ├── collections.md    # Qdrant schemas + IAM
+│       │   ├── configuration.md  # Config structure
+│       │   ├── encryption.md     # AES-256-GCM + Keychain
+│       │   ├── backup-restore.md # S3 backup workflows
+│       │   ├── point-management.md # ID strategies
+│       │   ├── operations.md     # Code examples
+│       │   └── testing.md        # Testing strategies
+│       ├── execution-engine/     🔄 To be designed
+│       ├── estate-scanner/       🔄 To be designed
+│       └── request-builder/      🔄 To be designed
 ├── 03-server/            # Server ecosystem (its own complex world)
 │   ├── agents/           # Multi-agent system (classification, operations, validation, risk)
 │   ├── microservices/    # Service-oriented architecture
@@ -43,6 +54,15 @@ docs/
 ├── 05-security/          # Security and privacy architecture
 ├── 06-data/              # Data models, schemas, API contracts
 └── 07-operations/        # Deployment, monitoring, DR
+
+working-docs/             # Active design documents
+├── CLIENT-DESIGN-WORKING-DOC-V2.md   # Storage Service design
+├── CLIENT-MODULE-ARCHITECTURE.md     # Module overview
+└── DOCS-STRUCTURE.md                 # Documentation plan
+
+reference/                # Reference implementations
+├── CONTEXT-MANAGEMENT-ARCHITECTURE.md # Node.js reference
+└── COMPARISON-NODE-VS-RUST-STORAGE.md # Design comparison
 
 diagrams/
 ├── system/               # Overall, client, server architecture diagrams
@@ -94,6 +114,15 @@ Use the [adr/template.md](adr/template.md) for consistency.
 - **AWS estate sync**: Periodic sync (6h full, 15min incremental) from AWS APIs → Transform → Embed → Qdrant
 - **Credentials**: Stored in OS Keychain, never leave client
 - **Playbooks**: Stored in Git on server, indexed in server-side Qdrant
+
+### Client Storage Service
+- **Single Qdrant Instance**: Embedded mode, ~20-30 MB
+- **Chat History**: Dummy vectors (1D), filter-based access, encrypted content
+- **AWS Estate**: Real embeddings (384D), semantic search + filters, **IAM permissions embedded per resource**
+- **IAM Integration**: Each resource stores its allowed/denied actions and user context
+- **Point ID Strategy**: Random UUIDs for chat (immutable), deterministic IDs for estate (mutable, prevents duplicates)
+- **Encryption**: AES-256-GCM with OS Keychain (macOS/Windows/Linux)
+- **Backup**: Auto S3 sync with configurable retention (7 days local, 30 days S3)
 
 ### Server Agent System
 - **Classification Agent**: Intent recognition and routing

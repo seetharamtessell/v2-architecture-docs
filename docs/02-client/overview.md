@@ -34,7 +34,20 @@ The client is a Tauri-based desktop application that manages AWS estate data loc
 └─────────────────────────────────────┘
 ```
 
-## Subdirectories
+## Modular Architecture
+
+The client is organized into separate, focused modules (Rust crates):
+
+### [Modules](modules/)
+- **[Storage Service](modules/storage-service/)** - Estate + Chat storage with RAG, Backup management ✅
+- **[Execution Engine](modules/execution-engine/)** - AWS command execution, Approval workflow 🔄
+- **[Estate Scanner](modules/estate-scanner/)** - AWS resource discovery, Multi-account scanning 🔄
+- **[Request Builder](modules/request-builder/)** - Context enrichment, Server communication 🔄
+- **Frontend** - React UI (to be documented) 🔄
+
+See [modules/overview.md](modules/overview.md) for complete module architecture.
+
+## Legacy Subdirectories (Will be reorganized)
 - [frontend/](frontend/) - UI layer architecture
 - [backend/](backend/) - Rust core components
 - [storage/](storage/) - Local data storage
