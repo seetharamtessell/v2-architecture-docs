@@ -36,16 +36,21 @@ The client is a Tauri-based desktop application that manages AWS estate data loc
 
 ## Modular Architecture
 
-The client is organized into separate, focused modules (Rust crates):
+The client is organized into separate, focused modules (pure Rust crates):
 
 ### [Modules](modules/)
-- **[Storage Service](modules/storage-service/)** - Estate + Chat storage with RAG, Backup management ✅
-- **[Execution Engine](modules/execution-engine/)** - AWS command execution, Approval workflow 🔄
-- **[Estate Scanner](modules/estate-scanner/)** - AWS resource discovery, Multi-account scanning 🔄
-- **[Request Builder](modules/request-builder/)** - Context enrichment, Server communication 🔄
-- **Frontend** - React UI (to be documented) 🔄
 
-See [modules/overview.md](modules/overview.md) for complete module architecture.
+| Module | Status | Description |
+|--------|--------|-------------|
+| **[Storage Service](modules/storage-service/)** | ✅ Complete | Estate + Chat storage with RAG, IAM integration, Auto S3 backup |
+| **[Execution Engine](modules/execution-engine/)** | ✅ Complete | Pure Rust crate for command execution with Tokio + Streaming |
+| **[Estate Scanner](modules/estate-scanner/)** | 🔄 Next | AWS resource discovery, Multi-account scanning |
+| **[Request Builder](modules/request-builder/)** | 🔄 Pending | Context enrichment, Server communication |
+| **Frontend** | 🔄 Pending | React UI (to be documented) |
+
+**Progress**: 2/4 core modules complete (50%) | ~10,000 lines of documentation
+
+See [modules/overview.md](modules/overview.md) for complete module architecture and dependencies.
 
 ## Legacy Subdirectories (Will be reorganized)
 - [frontend/](frontend/) - UI layer architecture

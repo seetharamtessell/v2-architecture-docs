@@ -8,6 +8,14 @@ The Storage Service provides a clean, type-safe Rust API for all local storage o
 
 **Crate**: `cloudops-storage-service`
 
+---
+
+> **📦 Common Types**: This module uses shared types from [`cloudops-common`](../common/). Key types like `AWSResource`, `IAMPermissions`, `UserContext`, and `ResourceConstraints` are defined in the common crate and referenced here.
+>
+> See: [Common Types Documentation](../common/README.md)
+
+---
+
 ## Main Entry Point
 
 ### StorageService
@@ -297,7 +305,14 @@ impl EstateStorage {
 
 #### Data Types
 
+> **📦 Note**: The following types are defined in [`cloudops-common`](../common/README.md) and re-exported here for convenience. See the common types documentation for complete details.
+
 ```rust
+use cloudops_common::aws::{AWSResource, IAMPermissions, UserContext, ResourceConstraints};
+
+// AWSResource - Complete AWS resource representation
+// See: https://docs/02-client/modules/common/README.md#awsresource
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AWSResource {
     pub resource_type: String,
@@ -316,6 +331,9 @@ pub struct AWSResource {
     pub last_synced: DateTime<Utc>,
 }
 
+// IAMPermissions - Per-resource IAM permissions
+// See: https://docs/02-client/modules/common/README.md#iampermissions
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IAMPermissions {
     /// Actions allowed on this specific resource
@@ -328,6 +346,9 @@ pub struct IAMPermissions {
     pub user_context: UserContext,
 }
 
+// UserContext - AWS user/role context
+// See: https://docs/02-client/modules/common/README.md#usercontext
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserContext {
     /// IAM username
@@ -339,6 +360,9 @@ pub struct UserContext {
     /// Session expiration (for temporary credentials)
     pub session_expires: Option<DateTime<Utc>>,
 }
+
+// ResourceConstraints - Operational constraints
+// See: https://docs/02-client/modules/common/README.md#resourceconstraints
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceConstraints {

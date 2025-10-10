@@ -31,7 +31,7 @@ docs/
 ├── 02-client/            # Client architecture (Tauri app)
 │   ├── overview.md       # Client architecture overview
 │   └── modules/          # Modular client architecture
-│       ├── storage-service/      ✅ Design Complete
+│       ├── storage-service/      ✅ Complete (~4,000 lines, 9 files)
 │       │   ├── architecture.md   # Overall design, components
 │       │   ├── api.md            # Complete Rust API reference
 │       │   ├── collections.md    # Qdrant schemas + IAM
@@ -41,9 +41,10 @@ docs/
 │       │   ├── point-management.md # ID strategies
 │       │   ├── operations.md     # Code examples
 │       │   └── testing.md        # Testing strategies
-│       ├── execution-engine/     🔄 To be designed
-│       ├── estate-scanner/       🔄 To be designed
-│       └── request-builder/      🔄 To be designed
+│       ├── execution-engine/     ✅ Complete (~6,000 lines, 9 files)
+│       ├── estate-scanner/       ✅ Complete (~3,000 lines, 4 files)
+│       ├── common/               ✅ Complete (~650 lines, 1 file)
+│       └── request-builder/      🔄 Next (0% - to be designed)
 ├── 03-server/            # Server ecosystem (its own complex world)
 │   ├── agents/           # Multi-agent system (classification, operations, validation, risk)
 │   ├── microservices/    # Service-oriented architecture
@@ -58,6 +59,9 @@ docs/
 working-docs/             # Active design documents
 ├── CLIENT-DESIGN-WORKING-DOC-V2.md   # Storage Service design
 ├── CLIENT-MODULE-ARCHITECTURE.md     # Module overview
+├── MODULE-INTERACTION-ANALYSIS.md    # How modules communicate
+├── COMMON-TYPES-ANALYSIS.md          # Shared type definitions
+├── SESSION-SUMMARY.md                # Development session notes
 └── DOCS-STRUCTURE.md                 # Documentation plan
 
 reference/                # Reference implementations
@@ -124,6 +128,13 @@ Use the [adr/template.md](adr/template.md) for consistency.
 - **Encryption**: AES-256-GCM with OS Keychain (macOS/Windows/Linux)
 - **Backup**: Auto S3 sync with configurable retention (7 days local, 30 days S3)
 
+### Client Module Architecture
+- **Storage Service**: Single Qdrant instance, dual collections (chat + estate), IAM integration
+- **Execution Engine**: Pure Rust crate, Tokio + streaming, background execution
+- **Estate Scanner**: Thin orchestrator, pluggable scanners, IAM discovery, semantic embeddings
+- **Common Types**: Shared data structures (AWSResource, IAMPermissions, etc.), zero framework deps
+- **Request Builder**: (To be designed) Context enrichment, server communication
+
 ### Server Agent System
 - **Classification Agent**: Intent recognition and routing
 - **Operations Agent**: Script generation from playbooks
@@ -143,6 +154,12 @@ Use the [adr/template.md](adr/template.md) for consistency.
 2. **Server agents**: Add to [docs/03-server/agents/](docs/03-server/agents/)
 3. **Server microservices**: Add to [docs/03-server/microservices/](docs/03-server/microservices/)
 4. Update integration/flow documentation if it affects request flow
+
+### Documenting Module Interactions
+1. **Identify dependencies**: Which modules call which (e.g., Estate Scanner → Execution Engine + Storage Service)
+2. **Document data contracts**: What types are passed between modules (use Common Types)
+3. **Update MODULE-INTERACTION-ANALYSIS.md**: Keep the interaction map current
+4. **Show async boundaries**: Clarify where async operations happen
 
 ### Creating Diagrams
 1. Create source file in [diagrams/source/](diagrams/source/)

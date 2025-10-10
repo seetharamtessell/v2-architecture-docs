@@ -1,13 +1,262 @@
-# Session Summary - Storage Service Completion
+# Session Summary - Estate Scanner Complete
 
 **Date**: 2025-10-09
-**Status**: Storage Service Design Complete ✅
+**Status**: Estate Scanner Design Complete ✅
 
 ---
 
 ## Completed Work
 
-### 1. Storage Service Documentation (9 files)
+### 1. Estate Scanner Documentation (4 files)
+
+Created complete documentation in `docs/02-client/modules/estate-scanner/`:
+
+1. **README.md** - Module overview, thin orchestrator pattern, quick start
+2. **architecture.md** - Complete architecture with 7 core components, concurrency model
+3. **service-scanners.md** - Built-in scanners (EC2, RDS, S3, Lambda, VPC) + custom scanner guide
+4. **types.md** - All data structures with Rust definitions and JSON schemas
+
+**Total Documentation**: ~3,000+ lines across 4 files
+
+### 2. Execution Engine Documentation (9 files)
+
+Created complete documentation in `docs/02-client/modules/execution-engine/`:
+
+**Phase 1 - Core Documentation (COMPLETE ✅):**
+1. **README.md** - Module overview, quick start, installation with Cargo
+2. **architecture.md** - Tokio + Streaming pattern, all 7 components detailed
+3. **api.md** - Complete API reference with all methods and types
+4. **types.md** - All data structures with Rust definitions and JSON schemas
+5. **cargo-integration.md** - Cargo guide (npm equivalent), version management, publishing
+
+**Phase 2 - Usage Documentation (COMPLETE ✅):**
+6. **usage.md** - Practical examples, single/multiple command execution, patterns
+7. **event-handlers.md** - Custom event handler implementations, integrations
+8. **configuration.md** - ExecutionConfig options, environment-based config
+9. **error-handling.md** - Error types, retry strategies, recovery patterns
+
+**Total Documentation**: ~6,000+ lines across 9 files
+
+---
+
+## Key Design Decisions
+
+### Estate Scanner
+
+#### 1. **Thin Orchestrator Pattern**
+- **Coordinates, Doesn't Execute**: Delegates to Execution Engine and Storage Service
+- **No Heavy Lifting**: Just transformation, enrichment, and orchestration
+- **Pure Coordinator**: Uses AWS CLI via Execution Engine (not AWS SDK directly)
+
+#### 2. **Pluggable Service Scanners**
+- **Trait-Based**: `ServiceScanner` trait for extensibility
+- **Built-in Scanners**: EC2, RDS, S3, Lambda, VPC
+- **Easy to Extend**: Implement trait for custom AWS services
+- **Registry Pattern**: ServiceScannerRegistry for scanner management
+
+#### 3. **IAM Context-Aware Scanning**
+- **Per-Resource Permissions**: Uses IAM SimulatePrincipalPolicy API
+- **Discovers allowed/denied actions** for each resource
+- **Caches Results**: Reduces API calls
+- **User Context**: Tracks username, role ARN, session expiration
+
+#### 4. **Semantic Embeddings**
+- **384D Vectors**: Uses all-MiniLM-L6-v2 model
+- **Rich Text**: Combines resource_type, name, identifier, tags
+- **Batch Generation**: 100 resources at a time for performance
+- **Search-Ready**: Enables fuzzy/semantic resource search
+
+#### 5. **4-Level Parallelism**
+- **Level 1**: Accounts (Sequential - different credentials)
+- **Level 2**: Regions (Parallel - max 10 concurrent)
+- **Level 3**: Services (Parallel - max 10 concurrent)
+- **Level 4**: Resources (Parallel - max 100 concurrent)
+
+#### 6. **Graceful Degradation**
+- **Partial Success**: Continue scanning if some services fail
+- **Error Aggregation**: Collect non-fatal errors for reporting
+- **Retry Logic**: Configurable exponential backoff
+- **Performance**: ~30-50s for 1000 resources
+
+### Execution Engine
+
+#### 1. **Pure Rust Crate Architecture**
+- **Reusable Library**: Like npm package, can be used anywhere
+- **No Framework Dependencies**: Optional Tauri integration via trait
+- **Pluggable Event System**: Custom EventHandler trait for flexibility
+- **Cargo Integration**: Standard Rust package manager (equivalent to npm)
+
+### 2. **Tokio + Streaming Pattern**
+- **Async/Non-blocking**: Built on Tokio for concurrent execution
+- **Real-time Streaming**: Line-by-line stdout/stderr streaming
+- **Background Execution**: Returns execution_id immediately
+- **Timeout & Cancellation**: tokio::select! for graceful handling
+
+### 3. **Standardized Input/Output**
+- **Type-Safe**: Strongly typed with serde for JSON serialization
+- **Validated**: ExecutionRequest::validate() before execution
+- **Four Command Types**:
+  - `Script` - Execute script files (bash/sh/python)
+  - `Exec` - Execute command with arguments
+  - `Shell` - Execute shell command string
+  - `AwsCli` - AWS CLI convenience wrapper
+
+### 4. **Execution Strategies**
+- **Serial**: One by one (stop or continue on error)
+- **Parallel**: Concurrent with max_concurrency limit
+- **DependencyGraph**: Execute based on dependency DAG
+
+### 5. **State Management**
+- **In-Memory**: `Arc<RwLock<HashMap<Uuid, ExecutionState>>>`
+- **Logs in Temp Folder**: `/tmp/cloudops-executions/{uuid}.log`
+- **OS Cleanup**: Automatic cleanup by OS periodically
+
+---
+
+## Architecture Components
+
+### 1. ExecutionEngine (Public API)
+```rust
+pub async fn execute(request: ExecutionRequest) -> Result<Uuid>
+pub async fn execute_plan(plan: ExecutionPlan) -> Result<Uuid>
+pub async fn get_status(id: Uuid) -> Result<ExecutionStatus>
+pub async fn get_result(id: Uuid) -> Result<ExecutionResult>
+pub async fn cancel(id: Uuid) -> Result<()>
+pub async fn read_logs(id: Uuid) -> Result<String>
+```
+
+### 2. Command Executor (Tokio)
+- `tokio::process::Command` for process spawning
+- `BufReader + AsyncBufReadExt` for line-by-line streaming
+- `tokio::time::timeout` for timeout handling
+- `CancellationToken` for cancellation support
+
+### 3. Event System
+```rust
+#[async_trait]
+pub trait EventHandler: Send + Sync {
+    async fn on_event(&self, event: ExecutionEvent);
+}
+```
+**Events**: Started, Stdout, Stderr, Completed, Failed, Cancelled, Progress
+
+### 4. State Manager
+- Track executions in memory
+- Store logs to temp folder
+- Provide execution history
+
+---
+
+## Standardized Types
+
+### ExecutionRequest
+```json
+{
+  "id": "uuid",
+  "command": { "type": "aws_cli", "service": "ec2", "operation": "describe-instances" },
+  "env": { "AWS_PROFILE": "prod" },
+  "working_dir": null,
+  "timeout_ms": 120000,
+  "metadata": { "source": "server", "conversation_id": "uuid" }
+}
+```
+
+### ExecutionResult
+```json
+{
+  "id": "uuid",
+  "status": "completed",
+  "exit_code": 0,
+  "stdout": "...",
+  "stderr": "",
+  "duration": "2.5s",
+  "started_at": "2025-10-09T10:30:00Z",
+  "completed_at": "2025-10-09T10:30:02Z",
+  "log_path": "/tmp/cloudops-executions/{uuid}.log"
+}
+```
+
+---
+
+## Integration Examples
+
+### 1. Tauri Client
+```rust
+struct TauriEventHandler { app_handle: AppHandle }
+let engine = ExecutionEngine::new(config)
+    .with_event_handler(Arc::new(TauriEventHandler::new(app_handle)));
+```
+
+### 2. Server Microservice (Axum)
+```rust
+async fn execute(
+    engine: Arc<ExecutionEngine>,
+    Json(request): Json<ExecutionRequest>,
+) -> Json<Uuid> {
+    let execution_id = engine.execute(request).await.unwrap();
+    Json(execution_id)
+}
+```
+
+### 3. CLI Tool
+```rust
+let engine = ExecutionEngine::new(Default::default());
+let execution_id = engine.execute(request).await?;
+let result = engine.get_result(execution_id).await?;
+println!("{}", result.stdout);
+```
+
+---
+
+## Cargo Integration (npm Equivalent)
+
+### Adding Dependency
+```bash
+# Cargo (Rust)
+cargo add cloudops-execution-engine
+
+# npm (JavaScript) - equivalent
+npm install cloudops-execution-engine
+```
+
+### Cargo.toml (package.json equivalent)
+```toml
+[dependencies]
+cloudops-execution-engine = "0.1.0"
+tokio = { version = "1", features = ["full"] }
+```
+
+### Publishing
+```bash
+# Cargo
+cargo publish
+
+# npm - equivalent
+npm publish
+```
+
+---
+
+## File Organization
+
+```
+docs/02-client/modules/execution-engine/
+├── README.md                   # Overview and quick start
+├── architecture.md             # Design patterns and components
+├── api.md                      # Complete API reference
+├── types.md                    # Data structures and JSON schemas
+├── cargo-integration.md        # Cargo guide (npm equivalent)
+├── usage.md                    # Usage examples and patterns
+├── event-handlers.md           # Custom event handler guide
+├── configuration.md            # Configuration options
+└── error-handling.md           # Error types and strategies
+```
+
+---
+
+## Previous Work: Storage Service (COMPLETE ✅)
+
+### Storage Service Documentation (9 files)
 
 Created complete documentation in `docs/02-client/modules/storage-service/`:
 
@@ -21,148 +270,57 @@ Created complete documentation in `docs/02-client/modules/storage-service/`:
 8. **operations.md** - Code examples
 9. **testing.md** - Testing strategies
 
-### 2. Key Design Decisions
-
+### Key Design Decisions
 - **Single Qdrant Instance**: Embedded mode (~20-30 MB) for both chat and AWS estate
 - **Dual Collection Strategy**:
   - Chat: 1D dummy vectors, filter-only access
   - Estate: 384D real embeddings, semantic search + filters
-- **IAM Integration**: Permissions embedded per resource (allowed/denied actions + user context)
+- **IAM Integration**: Permissions embedded per resource
 - **Point ID Strategy**:
   - Chat: Random UUIDs (immutable messages)
-  - Estate: Deterministic IDs `{account}-{region}-{resource_id}` (prevents duplicates)
+  - Estate: Deterministic IDs `{account}-{region}-{resource_id}`
 - **Encryption**: AES-256-GCM with OS Keychain integration
-- **Auto S3 Backup**: Background scheduler with configurable retention (7d local, 30d S3)
-
-### 3. IAM Structure
-
-Each AWS resource contains embedded IAM permissions:
-
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AWSResource {
-    pub resource_type: String,
-    pub identifier: String,
-    pub account_id: String,
-    pub region: String,
-    pub iam: IAMPermissions,  // Embedded per resource
-    // ... other fields
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IAMPermissions {
-    pub allowed_actions: Vec<String>,
-    pub denied_actions: Vec<String>,
-    pub user_context: UserContext,
-}
-```
-
-### 4. Qdrant Collection Structure
-
-**Chat History Collection**:
-```json
-{
-  "id": "uuid-v4",
-  "vector": [0.0],  // 1D dummy
-  "payload": {
-    "context_id": "uuid",
-    "message_index": 0,
-    "role": "user",
-    "encrypted_content": "base64..."
-  }
-}
-```
-
-**AWS Estate Collection**:
-```json
-{
-  "id": "123456789012-us-west-2-rds-pg-instance-main1",
-  "vector": [0.123, 0.456, ...],  // 384D
-  "payload": {
-    "resource_type": "rds_instance",
-    "account_id": "123456789012",
-    "region": "us-west-2",
-    "service": "rds",
-    "encrypted_data": "base64...",
-    // Decrypted contains IAM permissions
-  }
-}
-```
-
-### 5. File Organization
-
-Created clean structure:
-- `working-docs/` - Active design documents
-- `docs/02-client/modules/storage-service/` - Final documentation
-- `reference/` - Reference implementations
-- Root: Only README.md, CLAUDE.md, STRUCTURE.md
-
-### 6. Project Documentation Updates
-
-- **CLAUDE.md**: Updated with Storage Service details, directory structure
-- **README.md**: Added project status table, Storage Service highlights
-- **docs/02-client/overview.md**: Added modular architecture section
-
-### 7. Git Commits
-
-- Commit 1: "Initialize v2 architecture documentation structure" (pushed ✅)
-- Commit 2: "Complete Storage Service documentation with IAM integration" (pending - too large for GitHub timeout)
+- **Auto S3 Backup**: Background scheduler with configurable retention
 
 ---
 
 ## Next Steps
 
-### Immediate: Estate Scanner Module Design
+### Immediate: Request Builder Module Design
 
-Need to design the Estate Scanner module with these focus areas:
+Need to design the Request Builder module (final client module!) with these focus areas:
 
-1. **AWS Credential Management**
-   - Load from `~/.aws/credentials`
-   - Multi-account support
-   - Role assumption
+1. **Context Enrichment**
+   - Gather relevant resources from Storage Service (semantic search)
+   - Gather recent chat history (last N messages)
+   - Combine into rich context for server
 
-2. **Service Scanners**
-   - Modular scanner architecture (trait-based)
-   - Service-specific implementations (EC2, RDS, S3, Lambda, etc.)
-   - Parallel scanning
+2. **Server Communication**
+   - HTTP client for server API calls
+   - Request/response handling
+   - Error handling and retries
 
-3. **IAM Permission Discovery**
-   - Use IAM SimulatePrincipalPolicy API
-   - Determine allowed/denied actions per resource
-   - Cache policy simulation results
+3. **Request Building**
+   - Standardized request format
+   - Include: user message, resources, chat history, metadata
+   - Server processes request and returns playbook
 
-4. **Scan Orchestration**
-   - Multi-account coordination
-   - Multi-region scanning
-   - Progress tracking
-   - Error handling & retry
+4. **Response Handling**
+   - Parse server response (playbook/script)
+   - Pass to Execution Engine for execution
+   - Store results back to Storage Service
 
-5. **Resource Processing**
-   - Deduplication (using deterministic IDs)
-   - Enrichment (tags, state, metadata)
-   - IAM attachment
-   - Embedding generation
-   - Upsert to Storage Service
-
-### Design Questions to Discuss
-
-1. **Credential Loading**: How to handle different credential types (static, SSO, temporary)?
-2. **Scanning Strategy**: Full scan vs incremental scan approach?
-3. **IAM Discovery**: When to simulate permissions (per resource or batched)?
-4. **Concurrency Model**: How many parallel scans (accounts, regions, services)?
-5. **Change Detection**: How to detect resource changes for incremental sync?
-6. **Error Handling**: Retry strategy for rate limits, timeouts, permission errors?
+**Note**: Request Builder is the final orchestrator that ties everything together!
 
 ---
 
 ## Key User Feedback
 
-- "still storage is not full done... I said lets design, do 't update" - Complete design before implementation
-- "major problme is docs are every where" - Need organized structure
-- "for estate, we will have hriacy of account and Iam for each service" - IAM embedded per resource
-- "we should use Qdrant point very carefully" - Point ID management critical
-- "lets update other docs before we got for other modules" - Complete docs before moving on
-- "Lets focus one by one" - One module at a time
+- "this module I should be able to use anywhere like even in server micro service also... it should like what npm for node" - ✅ Implemented as pure Rust crate
+- "Lets focus one by one" - ✅ Completed Storage Service, then Execution Engine, then Estate Scanner
+- "don't you think, we need to standrise, input type and formats" - ✅ Standardized all input/output formats with JSON schemas
+- "yes we need to talk about cargo also for uages" - ✅ Complete Cargo integration guide written
+- "I guess we don't need scanner explicitly as, execution is just another sciprt" → "May be we need thin as we need to define json structure, also we need to talk to both execution and storage service" - ✅ Implemented Estate Scanner as thin orchestrator
 
 ---
 
@@ -170,25 +328,56 @@ Need to design the Estate Scanner module with these focus areas:
 
 **Tech Stack**:
 - Client: Tauri (Rust + React)
-- Vector DB: Qdrant (embedded mode)
-- AWS SDK: aws-sdk-rust
-- Encryption: AES-256-GCM + OS Keychain
-- Backup: S3
+- Execution: Tokio (async runtime)
+- Package Manager: Cargo (like npm)
+- AWS SDK: aws-sdk-rust (for IAM discovery only)
+- AWS CLI: For resource discovery (via Execution Engine)
+- Serialization: serde + serde_json
+- Embeddings: all-MiniLM-L6-v2 (384D)
 
 **Client Modules**:
-1. Storage Service ✅ Design Complete
-2. Estate Scanner 🔄 Next to design
-3. Execution Engine 🔄 To be designed
-4. Request Builder 🔄 To be designed
+1. ✅ Storage Service - Design Complete
+2. ✅ Execution Engine - Design Complete
+3. ✅ Estate Scanner - Design Complete
+4. 🔄 Request Builder - Next to design
 
-**Storage Service API Summary**:
-```rust
-pub struct StorageService {
-    pub async fn init(config: StorageConfig) -> Result<Self>
-    pub async fn store_chat_message(msg: ChatMessage) -> Result<()>
-    pub async fn store_aws_resource(resource: AWSResource) -> Result<()>
-    pub async fn search_estate(query: &str, filters: HashMap) -> Result<Vec<AWSResource>>
-    pub async fn backup_to_s3() -> Result<BackupMetadata>
-    // ... more methods
-}
+---
+
+## Documentation Statistics
+
+| Module | Files | Lines | Status |
+|--------|-------|-------|--------|
+| Storage Service | 9 | ~4,000 | ✅ Complete |
+| Execution Engine | 9 | ~6,000 | ✅ Complete |
+| Estate Scanner | 4 | ~3,000 | ✅ Complete |
+| **Total** | **22** | **~13,000** | **3/4 modules (75%)** |
+
+---
+
+## Module Dependencies
+
 ```
+┌─────────────────────┐
+│  Request Builder    │ (Next to design - final module!)
+└─────────────────────┘
+          ↓
+    ┌─────────┴─────────┐
+    ↓                   ↓
+┌─────────────────┐ ┌──────────────────┐
+│ Estate Scanner  │ │ Storage Service  │
+│  ✅ Complete    │ │  ✅ Complete     │
+└─────────────────┘ └──────────────────┘
+          ↓
+┌─────────────────┐
+│ Execution Engine│
+│  ✅ Complete    │
+└─────────────────┘
+```
+
+**Module Interaction Flow**:
+1. Request Builder queries Storage Service (resources + chat)
+2. Request Builder sends enriched context to server
+3. Server returns playbook/script
+4. Request Builder passes to Execution Engine
+5. Execution results stored via Storage Service
+6. Estate Scanner refreshes resources periodically
