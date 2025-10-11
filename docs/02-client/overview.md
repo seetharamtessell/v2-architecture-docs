@@ -1,5 +1,8 @@
 # Client Architecture Overview
 
+**Status**: 90% Complete | [See Completion Status →](./COMPLETION-STATUS.md)
+**Last Updated**: October 2025
+
 ## Purpose
 The client is a Tauri-based desktop application that manages AWS estate data locally and executes operations securely.
 
@@ -9,6 +12,7 @@ The client is a Tauri-based desktop application that manages AWS estate data loc
 3. **Request Building**: Enrich user requests with complete resource context
 4. **Execution**: Run AWS CLI commands with user approval
 5. **Credential Management**: Secure storage of AWS credentials (never sent to server)
+6. **UI Rendering**: Server-driven UI with dynamic component system
 
 ## Architecture Layers
 
@@ -36,27 +40,38 @@ The client is a Tauri-based desktop application that manages AWS estate data loc
 
 ## Modular Architecture
 
-The client is organized into separate, focused modules (pure Rust crates):
+The client is organized into separate, focused modules:
 
-### [Modules](modules/)
+### [Modules](modules/) (Rust Crates)
 
 | Module | Status | Description |
 |--------|--------|-------------|
-| **[Storage Service](modules/storage-service/)** | ✅ Complete | Estate + Chat storage with RAG, IAM integration, Auto S3 backup |
-| **[Execution Engine](modules/execution-engine/)** | ✅ Complete | Pure Rust crate for command execution with Tokio + Streaming |
-| **[Estate Scanner](modules/estate-scanner/)** | 🔄 Next | AWS resource discovery, Multi-account scanning |
-| **[Request Builder](modules/request-builder/)** | 🔄 Pending | Context enrichment, Server communication |
-| **Frontend** | 🔄 Pending | React UI (to be documented) |
+| **[Storage Service](modules/storage-service/)** | ✅ Complete | Estate + Chat storage with RAG, S3 backup (9 docs) |
+| **[Execution Engine](modules/execution-engine/)** | ✅ Complete | Command execution with Tokio + Streaming (9 docs) |
+| **[Estate Scanner](modules/estate-scanner/)** | ✅ Complete | AWS resource discovery, Multi-account scanning (4 docs) |
+| **[Request Builder](modules/request-builder/)** | ⚠️ Design | Context enrichment, Server communication (pending) |
+| **[Common Types](modules/common/)** | ✅ Complete | Shared data structures across modules (1 doc) |
 
-**Progress**: 2/4 core modules complete (50%) | ~10,000 lines of documentation
+### [Frontend](frontend/) (React + TypeScript)
 
-See [modules/overview.md](modules/overview.md) for complete module architecture and dependencies.
+| Component | Status | Description |
+|-----------|--------|-------------|
+| **[MVC Architecture](frontend/mvc-architecture.md)** | ✅ Complete | Models, Views, Controllers, Services |
+| **[User Flows](frontend/user-flows.md)** | ✅ Complete | 8 complete user journeys |
+| **[UI Agent Components](frontend/ui-agent-components.md)** | ✅ Complete | Dynamic rendering system (30+ components) |
+| **[Authentication](frontend/authentication-security.md)** | ✅ Complete | Cognito + JWT + OS Keychain |
 
-## Legacy Subdirectories (Will be reorganized)
-- [frontend/](frontend/) - UI layer architecture
-- [backend/](backend/) - Rust core components
-- [storage/](storage/) - Local data storage
-- [sync/](sync/) - AWS data synchronization
+### [Tauri Integration](tauri-integration/) (IPC Bridge)
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| **[Commands](tauri-integration/README.md)** | ✅ Complete | 70+ Tauri commands (5 docs) |
+| **[Events](tauri-integration/README.md#event-categories)** | ✅ Complete | 15+ Tauri events (3 docs) |
+| **Setup Guides** | ⏳ Pending | Configuration and build docs |
+
+**Progress**: 90% complete (4 modules + frontend + Tauri integration) | ~25,000 lines of documentation
+
+See [COMPLETION-STATUS.md](./COMPLETION-STATUS.md) for detailed progress tracking.
 
 ---
 *See [architecture.md](../../architecture.md) for complete system context.*
