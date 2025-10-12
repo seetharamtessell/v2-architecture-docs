@@ -839,6 +839,6 @@ const api = new APIService('https://api-url');
 3. **Mock realistic data**: Use data that looks like production
 4. **Review regularly**: Check code quality frequently
 5. **Document decisions**: Keep notes on why choices were made
-6. **Stay aligned**: Sync with Platform/Server teams weekly
+6. **Stay aligned**: Sync with Platform/Server teams regularly
 
 Ready to implement! 🚀

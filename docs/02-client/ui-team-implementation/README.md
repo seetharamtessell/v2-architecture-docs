@@ -75,10 +75,10 @@ Copy prompts from [05-claude-prompts.md](./05-claude-prompts.md) to accelerate d
 
 ### ⚠️ **Integration Later** (After Platform/Server ready)
 
-1. Real Tauri commands (Week 3-4)
-2. Real WebSocket connection (Week 3-4)
-3. Real HTTP API calls (Week 3-4)
-4. AWS Cognito authentication (Week 4)
+1. Real Tauri commands
+2. Real WebSocket connection
+3. Real HTTP API calls
+4. AWS Cognito authentication
 
 ---
 
