@@ -166,16 +166,26 @@ The Escher AI Server is a **pure stateless processing engine** - it receives req
 ```
 User: "Show me all running EC2 instances in us-east-1"
 
+Physical/Extend My Laptop (Client-Side Processing):
+├─ Search local RAG (vector store):
+│   ├─ Cloud Estate Inventory: Check for EC2 instances in us-east-1
+│   ├─ Chat History: Retrieve previous conversation context
+│   └─ Executed Operations: Check recent EC2-related operations
+└─ Prepare context from RAG results
+
 Physical/Extend My Laptop → Escher AI Server:
 ├─ Query: "Show me all running EC2 instances in us-east-1"
-└─ Context: Current cloud estate snapshot (anonymized resource inventory)
+└─ Context from RAG:
+    ├─ Previous chat history (last 5 messages for continuity)
+    ├─ Relevant estate info (EC2 instance count, regions)
+    └─ Recent operations (any EC2 operations in last hour)
 
 Escher AI Server Processing:
 ├─ Parse intent: List resources
 ├─ Identify scope: EC2, us-east-1, running state
 ├─ RAG lookup: EC2 list commands/APIs
-├─ Generate response type: Information query (not execution)
-└─ Return structured response
+├─ Analyze context: Understand user's recent activities
+└─ Generate response type: Information query (not execution)
 
 Escher AI Server → Physical/Extend My Laptop:
 ├─ Response Type: "information" | "execution" | "report"
@@ -185,12 +195,14 @@ Escher AI Server → Physical/Extend My Laptop:
 Physical/Extend My Laptop:
 ├─ If type = "information": Query cloud APIs locally, display results
 ├─ If type = "execution": Execute operation with Rust execution engine
-└─ If type = "report": Generate report and store locally/S3
+├─ If type = "report": Generate report and store locally/S3
+└─ Store interaction in RAG (chat history collection)
 ```
 
 **Key Points:**
-- **User's cloud estate is sent to AI Server for context** (necessary for intelligent responses)
-- **AI Server processes and returns response immediately** - does not store the estate
+- **Client searches RAG first**: Cloud estate inventory, chat history, executed operations
+- **Context sent to AI Server**: Previous chat history + relevant RAG results (not full snapshot)
+- **AI Server processes transiently**: Does not store context, forgets after response
 - **Privacy preserved**: AI Server never stores cloud estate, credentials, or chat history
 
 #### **2. Execution Flow (User → AI Server → Execution)**
@@ -198,13 +210,24 @@ Physical/Extend My Laptop:
 ```
 User: "Stop all dev EC2 instances in us-east-1"
 
+Physical/Extend My Laptop (Client-Side Processing):
+├─ Search local RAG (vector store):
+│   ├─ Cloud Estate Inventory: Find all dev EC2 instances in us-east-1
+│   ├─ Chat History: Retrieve full conversation history (for LLM context)
+│   └─ Executed Operations: Recent EC2-related operations
+└─ Prepare context from RAG results
+
 Physical/Extend My Laptop → Escher AI Server:
 ├─ Query: "Stop all dev EC2 instances in us-east-1"
-└─ Context: Cloud estate (including list of dev instances)
+└─ Context from RAG:
+    ├─ Full chat history (entire conversation for LLM context)
+    ├─ Dev instances found: 5 instances with tag=dev in us-east-1 (i-xxx, i-yyy, ...)
+    └─ Recent operations: List of recent EC2 operations (if any)
 
 Escher AI Server:
 ├─ Intent: Stop resources
 ├─ Scope: EC2, us-east-1, tag=dev
+├─ Context understanding: Full conversation history allows LLM to understand user's intent
 ├─ RAG lookup: Stop EC2 playbook
 ├─ Safety check: High-risk operation (stops multiple instances)
 └─ Generate execution plan
@@ -214,16 +237,17 @@ Escher AI Server → Physical/Extend My Laptop:
 ├─ Risk Level: "high"
 ├─ Requires Approval: true (if Manager persona)
 ├─ Execution Plan:
-│   ├─ Step 1: List EC2 instances with tag=dev in us-east-1
+│   ├─ Step 1: List EC2 instances with tag=dev in us-east-1 (5 instances found)
 │   ├─ Step 2: Confirm instances with user
-│   └─ Step 3: Stop instances (AWS CLI: aws ec2 stop-instances --instance-ids ...)
+│   └─ Step 3: Stop instances (AWS CLI: aws ec2 stop-instances --instance-ids i-xxx i-yyy ...)
 └─ Estimated Impact: 5 instances affected
 
 Physical/Extend My Laptop Rust Execution Engine:
 ├─ Display execution plan to user
 ├─ Request confirmation (if high-risk)
 ├─ Execute playbook steps
-└─ Store results in local state or S3/Blob/GCS
+├─ Store results in RAG (Executed Operations collection)
+└─ Store audit log in RAG (Immutable Reports collection)
 ```
 
 #### **3. Scheduled Job Flow (Extend My Laptop → AI Server)**
@@ -234,14 +258,25 @@ Scheduled Job: "Stop all dev VMs at 8pm daily"
 EventBridge/Cloud Scheduler → Extend My Laptop (Fargate/Container Instance/Cloud Run)
 └─ Trigger: Scheduled job execution
 
+Extend My Laptop (Client-Side Processing):
+├─ Load RAG from S3/Blob/GCS:
+│   ├─ Cloud Estate Inventory: Find all dev VMs across clouds
+│   ├─ Chat History: Load schedule creation context (when Manager created this schedule)
+│   └─ Executed Operations: Check previous executions of this schedule
+└─ Prepare context from RAG results
+
 Extend My Laptop → Escher AI Server:
-├─ Query: "Execute scheduled job: Stop all dev VMs"
-└─ Context: Current cloud estate snapshot (fetched from S3/Blob/GCS)
+├─ Query: "Execute scheduled job: Stop all dev VMs at 8pm"
+└─ Context from RAG:
+    ├─ Schedule creation chat history (for LLM context)
+    ├─ Dev VMs found: 15 VMs (5 AWS EC2, 6 Azure VMs, 4 GCP Compute Engine)
+    └─ Last execution: Yesterday at 8pm, 15 VMs stopped successfully
 
 Escher AI Server:
 ├─ Intent: Execute scheduled operation
 ├─ RAG lookup: Stop VMs playbook (multi-cloud)
-├─ Generate execution plan for all clouds (AWS EC2, Azure VMs, GCP Compute Engine)
+├─ Context understanding: Schedule created by Manager, routine daily operation
+├─ Generate execution plan for all clouds
 └─ Return structured operations
 
 Escher AI Server → Extend My Laptop:
@@ -254,8 +289,9 @@ Escher AI Server → Extend My Laptop:
 
 Extend My Laptop Rust Execution Engine:
 ├─ Execute multi-cloud operations in parallel
-├─ Store results in S3/Blob/GCS
-├─ Store audit logs
+├─ Store results in RAG (Executed Operations collection)
+├─ Store audit logs in RAG (Immutable Reports collection)
+├─ Upload RAG to S3/Blob/GCS
 └─ Shutdown (event-based lifecycle)
 ```
 
@@ -264,33 +300,44 @@ Extend My Laptop Rust Execution Engine:
 ```
 User: "Create a disaster recovery playbook for my production environment"
 
+Physical Laptop (Client-Side Processing):
+├─ Search local RAG (vector store):
+│   ├─ Cloud Estate Inventory: Find all production resources (RDS, EC2, S3, ALB)
+│   ├─ Chat History: Retrieve full conversation history (for LLM context)
+│   └─ Executed Operations: Check existing backups, snapshots, replications
+└─ Prepare context from RAG results
+
 Physical Laptop → Escher AI Server:
 ├─ Query: "Create a disaster recovery playbook for my production environment"
-└─ Context: Production environment inventory (RDS, EC2, S3, ALB configurations)
+└─ Context from RAG:
+    ├─ Full chat history (entire conversation for LLM context)
+    ├─ Production inventory: RDS (2 instances), EC2 (12 instances), S3 (5 buckets), ALB (3 load balancers)
+    └─ Existing DR measures: RDS automated backups enabled, no S3 replication, no AMI automation
 
 Escher AI Server:
 ├─ Intent: Generate playbook
+├─ Context understanding: User needs DR playbook, some measures exist, gaps identified
 ├─ RAG lookup: DR best practices, backup strategies, multi-region patterns
-├─ Analyze context: Identify critical resources
-└─ Generate custom playbook
+├─ Analyze context: Identify critical resources and missing DR components
+└─ Generate custom playbook addressing gaps
 
 Escher AI Server → Physical Laptop:
 ├─ Response Type: "playbook"
 ├─ Playbook Name: "Production DR Playbook"
 ├─ Steps:
-│   ├─ Step 1: Enable automated RDS snapshots (daily)
-│   ├─ Step 2: Replicate S3 buckets to backup region
-│   ├─ Step 3: Create AMIs of critical EC2 instances
+│   ├─ Step 1: Enable automated RDS snapshots (daily) - ✅ Already enabled
+│   ├─ Step 2: Replicate S3 buckets to backup region - ⚠️ Missing, critical
+│   ├─ Step 3: Create AMIs of critical EC2 instances - ⚠️ Missing, recommended
 │   ├─ Step 4: Configure cross-region ALB with health checks
 │   ├─ Step 5: Set up Route53 failover routing
 │   └─ Step 6: Test failover procedure monthly
-├─ Estimated Cost: $X/month
+├─ Estimated Cost: $X/month (based on current production size)
 └─ Compliance: Meets RTO=4h, RPO=1h requirements
 
 Physical Laptop:
 ├─ Display playbook to user
 ├─ User reviews/modifies playbook
-├─ Store playbook locally or in S3/Blob/GCS
+├─ Store playbook in RAG (Executed Operations collection)
 └─ User can execute playbook on-demand or schedule it
 ```
 
