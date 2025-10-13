@@ -14,10 +14,115 @@
 - **Multi-Cloud Support**: Single platform for AWS, Azure, GCP (and future cloud providers)
 - **Conversational Management**: Natural language interface for all cloud operations
 - **Unified Experience**: Consistent interface across all cloud providers
-- **Client-Side State**: Cloud estate, chat history, and credentials remain on customer's machine
-- **Client-Side Execution**: Operations execute from client using customer's credentials
-- **Privacy First**: No cloud credentials or estate data stored on server
+- **User-Controlled State**: State and execution remain in user's control (local or user's cloud)
+- **Privacy First**: Escher AI Server is 100% stateless - stores nothing about users
 - **AI-Powered Intelligence**: Server provides cloud-agnostic operations knowledge, recommendations, and playbook generation
+- **Flexible Deployment**: User chooses local-only or extended to cloud model
+
+---
+
+## Deployment Architecture
+
+Escher offers **two deployment models** to meet different user needs:
+
+### **Model 1: Local Only** (Beta / Lightweight Users)
+
+**Target Users**: Individual contributors, small teams, users with simple operations
+
+**Architecture**:
+- **Physical Laptop** runs Tauri application (Rust backend + React frontend)
+- **Local Execution**: All operations execute from laptop using Rust execution engine
+- **Local State**: Chat history, estate inventory, credentials stored on laptop
+- **Requirements**: Laptop must stay online for scheduled operations
+
+**Pros**:
+- Zero cloud infrastructure costs
+- Complete local control
+- Simple setup
+
+**Cons**:
+- Laptop must remain online for scheduled jobs
+- Limited to laptop's compute resources
+- No cross-device access to state
+
+---
+
+### **Model 2: Extended Laptop** (Main Release / Power Users)
+
+**Target Users**: Teams with scheduled operations, long-running tasks, 24/7 requirements
+
+**Architecture**:
+```
+Physical Laptop (Tauri App) ←→ Escher AI Server (Stateless Brain)
+        ↓↑                              ↑
+Extended Laptop (User's Cloud)          |
+        ↓                                |
+Cloud Schedulers + Execution + State ←--┘
+```
+
+**Components in User's Cloud**:
+
+| Cloud Provider | Scheduler | Execution | State Storage | Credentials |
+|---|---|---|---|---|
+| **AWS** | EventBridge | Fargate | S3 | SSM Parameter Store |
+| **Azure** | Logic Apps / Functions | Container Instances | Blob Storage | Key Vault |
+| **GCP** | Cloud Scheduler | Cloud Run | Cloud Storage | Secret Manager |
+
+**Setup Process**:
+1. User chooses "Extend to Cloud" from physical laptop
+2. User selects cloud provider for Extended Laptop (AWS, Azure, or GCP)
+3. Physical laptop uses **user's local credentials** to provision infrastructure in **user's account**:
+   - Deploys **Escher-provided container image** (Rust execution engine + cloud CLIs)
+   - Creates scheduler (EventBridge/Logic Apps/Cloud Scheduler)
+   - Creates state storage (S3/Blob/GCS buckets)
+   - Creates credential storage (SSM/Key Vault/Secret Manager)
+4. User **installs cloud credentials** in Extended Laptop (just like local laptop - AWS CLI configure, Azure CLI login, gcloud auth)
+5. Physical laptop becomes thin client, Extended Laptop is single source of truth
+
+**Execution Model**:
+- **Physical Laptop**: Interactive operations, ad-hoc queries, real-time tasks
+- **Extended Laptop**: Scheduled operations, long-running tasks, automation, reports
+- **Event-Based Lifecycle**: Extended Laptop starts on-demand, stops when idle (cost optimization)
+  - Scheduler triggers wake up Extended Laptop for scheduled jobs
+  - Long-running operations keep Extended Laptop alive until completion
+  - Auto-stops after idle period
+
+**Data Flows**:
+1. **User Query**: Physical Laptop → Escher AI Server → AI response → Physical Laptop
+2. **Interactive Execution**: Physical Laptop → Extended Laptop → Cloud APIs → Results → State Storage (S3/Blob/GCS)
+3. **Scheduled Execution**: Scheduler (EventBridge/etc) → Extended Laptop → Cloud APIs → Results → State Storage
+4. **State Sync**: Physical Laptop pulls latest state from Extended Laptop storage
+
+**Multi-Cloud Management**:
+- Extended Laptop (e.g., on AWS) manages **all clouds** (AWS + Azure + GCP)
+- User installs credentials for all clouds in Extended Laptop's credential store
+- Example: AWS Fargate Extended Laptop with AWS credentials (SSM) + Azure Service Principal (SSM) + GCP Service Account (SSM)
+
+**Escher AI Server Role**:
+- **100% Stateless**: Stores nothing about users, no credentials, no state
+- **Provides**: LLM responses, operation suggestions, playbook generation, AI intelligence
+- **Communication**: Physical Laptop ↔ AI Server (for conversational AI), Extended Laptop ↔ AI Server (for scheduled job intelligence)
+
+**Pros**:
+- 24/7 operations without laptop online
+- Scheduled jobs run reliably
+- Long-running operations don't block laptop
+- Cross-device access to state
+- Event-based compute = lower costs than always-on
+
+**Cons**:
+- Cloud infrastructure costs (EventBridge, Fargate/Container Instances, S3/Blob/GCS)
+- More complex setup
+- Cold start delays for event-based execution
+
+---
+
+### **User Choice**
+
+Users can switch between models:
+- Start with **Local Only** for simplicity
+- Upgrade to **Extended Laptop** when they need scheduling/automation
+- Downgrade back to **Local Only** anytime (Extended Laptop infrastructure can be destroyed)
 
 ---
 
@@ -168,68 +273,76 @@
 
 ## Architecture Questions to Resolve
 
-### 🔴 **Critical - Execution Model**
+### ✅ **Resolved - Deployment & Execution**
 
-#### 1. Immediate Operations (User-Initiated)
-- ✅ **DECIDED**: Client executes with stored credentials
-- ✅ Already documented in client architecture
+#### 1. Deployment Model
+- ✅ **DECIDED**: Two models - Local Only (Beta) and Extended Laptop (Main Release)
+- ✅ User chooses deployment based on their needs
 
-#### 2. Scheduled Operations (Automated)
-- ❓ **OPEN**: Who executes when client is offline?
-  - **Option A**: Client must be online (scheduled tasks run from client)
-  - **Option B**: Server executes with AssumeRole (temporary credentials)
-  - **Option C**: Hybrid (critical operations via server, others wait for client)
+#### 2. Immediate Operations (User-Initiated)
+- ✅ **DECIDED**: Executed by Physical Laptop (Local Only) or Extended Laptop (Extended mode)
+- ✅ Uses user's stored credentials
 
-#### 3. Continuous Monitoring & Automated Remediation
-- ❓ **OPEN**: How triggered?
-  - Event-driven (CloudWatch Events)?
-  - Polling from client?
-  - Server-side monitoring with AssumeRole?
+#### 3. Scheduled Operations (Automated)
+- ✅ **DECIDED**:
+  - **Local Only**: Physical laptop must be online (local cron/scheduler)
+  - **Extended Laptop**: Cloud scheduler (EventBridge/Logic Apps/Cloud Scheduler) triggers Extended Laptop
+  - User chooses model based on requirements
+
+#### 4. State & Credentials Storage
+- ✅ **DECIDED**:
+  - **Local Only**: Stored on physical laptop
+  - **Extended Laptop**: Stored in user's cloud (S3/Blob/GCS for state, SSM/Key Vault/Secret Manager for credentials)
+  - **Escher AI Server**: 100% stateless, stores nothing
+
+#### 5. Continuous Monitoring & Automated Remediation
+- ✅ **DECIDED**:
+  - **Local Only**: Limited to when laptop online
+  - **Extended Laptop**: Event-driven via cloud schedulers (EventBridge Events, Azure Event Grid, Cloud Pub/Sub)
 
 ---
 
-### 🟡 **Important - Data & Storage**
+### 🟡 **Important - Reports & Analytics**
 
 #### 1. Historical Data for Reports
-- ❓ **OPEN**: Where stored?
-  - **Option A**: Client only (limited retention)
-  - **Option B**: Server (longer retention, cross-device access)
-  - **Option C**: Hybrid (recent on client, historical on server)
+- ❓ **OPEN**: Where stored and for how long?
+  - **Local Only**: Local database on laptop (limited retention)?
+  - **Extended Laptop**: S3/Blob/GCS (longer retention, configurable by user)?
+  - Retention policy (30 days, 90 days, 1 year)?
 
-#### 2. Cost Data
+#### 2. Cost Data Collection
 - ❓ **OPEN**: How accessed?
-  - AWS Cost Explorer API from client?
-  - Aggregated on server for trends?
-  - Both?
+  - Direct API calls to AWS Cost Explorer, Azure Cost Management, GCP Billing APIs?
+  - Real-time or periodic snapshots?
+  - Stored for historical analysis?
 
-#### 3. Reports Storage
-- ❓ **OPEN**: Where generated and stored?
-  - Client-side generation, stored locally?
-  - Server-side generation, cloud storage?
-  - Generate on client, backup to server?
+#### 3. Report Generation
+- ❓ **OPEN**:
+  - On-demand or scheduled?
+  - Export formats: PDF, CSV, Excel, JSON?
+  - Email delivery option?
 
 ---
 
-### 🟢 **Moderate - Access & Permissions**
+### 🟢 **Moderate - Collaboration & RBAC**
 
-#### 1. Server AssumeRole Access
-- ❓ **OPEN**: For what operations?
-  - Scheduled operations only?
-  - Reports generation?
-  - Monitoring?
-  - Or none (stay pure client-side)?
-
-#### 2. Privacy Model
-- ❓ **OPEN**: Current docs say "no credentials on server"
-  - Does AssumeRole violate this?
-  - Or is temporary limited access acceptable?
-  - Need to clarify privacy boundaries
-
-#### 3. Multi-Account Access
+#### 1. Multi-Account/Subscription/Project Access
 - ❓ **OPEN**: How managed?
-  - Client stores credentials per account?
-  - AssumeRole chains from single credential?
+  - User installs credentials for each account/subscription/project?
+  - Cross-account AssumeRole chains (AWS), Service Principals (Azure), Service Accounts (GCP)?
   - Both patterns supported?
+
+#### 2. Team Collaboration
+- ❓ **OPEN**:
+  - How do Manager and Executor personas collaborate?
+  - Approval workflows stored where (local vs cloud)?
+  - Real-time notifications needed?
+
+#### 3. Audit Trail
+- ❓ **OPEN**:
+  - All operations logged where?
+  - Immutable audit log requirements?
+  - Compliance retention policies?
 
 ---
 
@@ -251,53 +364,59 @@
 
 ## Next Steps - Architecture Discussion
 
-### Phase 1: Define Execution Model
-1. Decide on scheduled operations execution (client vs server)
-2. Define AssumeRole mechanism (if needed)
-3. Update privacy model documentation
+### ✅ Phase 1: Define Execution Model (COMPLETE)
+1. ✅ Decided on two deployment models (Local Only vs Extended Laptop)
+2. ✅ Defined scheduled operations execution (local scheduler vs cloud scheduler)
+3. ✅ Clarified privacy model (Escher AI Server 100% stateless, state in user's control)
+4. ✅ Defined Extended Laptop provisioning (Escher provisions in user's account with user's credentials)
 
-### Phase 2: Define Data Architecture
-1. Historical data retention strategy
-2. Reports generation and storage model
-3. Cost data aggregation approach
+### 🔄 Phase 2: Define Data Architecture (IN PROGRESS)
+1. ❓ Historical data retention strategy
+2. ❓ Reports generation and storage model
+3. ❓ Cost data collection and aggregation approach
+4. ❓ Export formats and delivery mechanisms
 
-### Phase 3: Define Personas & RBAC
+### ⏳ Phase 3: Define Personas & RBAC (PENDING)
 1. Complete persona definitions (Manager, Executor, others?)
 2. Permission model per persona
-3. Approval workflows
-4. "Extend me" pattern details
+3. Approval workflows (local vs cloud-based)
+4. "Extend me" pattern implementation details
+5. Team collaboration mechanisms
 
-### Phase 4: Document Complete Operations
+### ⏳ Phase 4: Document Complete Operations (PENDING)
 1. List all supported cloud operations by category
 2. Define which operations need approval
 3. Risk levels per operation type
 4. Automation boundaries
+5. Multi-account/subscription/project patterns
 
 ---
 
 ## Alignment Check
 
-### ✅ **Currently Aligned**
-- Cloud ops AI platform with conversational interface
-- Client-side state (AWS estate, chat, credentials)
-- Client-side execution for immediate operations
-- Privacy-first approach (credentials don't leave client for user operations)
+### ✅ **Fully Aligned & Documented**
+- Multi-cloud platform (AWS, Azure, GCP) with conversational interface
+- Two deployment models (Local Only and Extended Laptop) based on user needs
+- State and execution in user's control (local or user's cloud)
+- Escher AI Server 100% stateless (no user data, credentials, or state)
+- Extended Laptop provisioned in user's account with user's credentials
+- Scheduled operations via cloud schedulers (EventBridge/Logic Apps/Cloud Scheduler)
+- Multi-cloud management from single Extended Laptop
+- Rust execution engine for operations (playbooks, CLI commands, shell scripts)
 
-### ⚠️ **Needs Clarification**
-- Scheduled operations execution model
-- Server AssumeRole access for reports/automation
-- Historical data storage location
-- Reports generation architecture
-- Complete persona definitions
+### 🟡 **Partially Defined - Need Details**
+- Reports & analytics architecture (generation, storage, retention)
+- Cost data collection and historical analysis
+- Multi-account/subscription/project credential management
+- Collaboration and approval workflows
 - "Extend me" pattern implementation
 
 ### ❌ **Not Yet Documented**
-- Full list of cloud operations by category
-- Reports & analytics architecture
-- Schedulers/automation architecture
-- Personas & RBAC model
+- Complete list of supported cloud operations by category
+- Personas & RBAC model details
 - Budget management features
-- Collaboration workflows
+- Notification and alerting mechanisms
+- Audit trail and compliance logging
 
 ---
 
