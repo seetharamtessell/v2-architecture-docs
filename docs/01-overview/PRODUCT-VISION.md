@@ -56,6 +56,7 @@ Escher offers **two deployment models** to meet different user needs:
 
 **Cons**:
 - Laptop must remain online for scheduled jobs
+- **Laptop must remain always-on for real-time alerts** (critical limitation for monitoring)
 - Limited to laptop's compute resources
 - No cross-device access to state (backups for recovery only, not real-time sync)
 
@@ -167,6 +168,434 @@ Users can switch between models:
 - Start with **Local Only** for simplicity
 - Upgrade to **Extend My Laptop** when they need scheduling/automation
 - Downgrade back to **Local Only** anytime (Extend My Laptop infrastructure can be destroyed)
+
+---
+
+### **Alert & Event Handling Architecture**
+
+Escher provides **two types of alert systems** to ensure comprehensive monitoring - "Sensors" that act like the nervous system, continuously monitoring the cloud environment and alerting the "Brain" (AI Server) when action is needed.
+
+#### **1. Real-Time Operational Alerts** (🚨 Can't Wait - Immediate Action Required)
+
+**Purpose**: Immediate notification and action for critical events that require urgent attention
+
+**Target Events**:
+- 🔴 **CRITICAL**: Production database down, security breach (public S3 with PII), service outage, budget exceeded 200%
+- 🟠 **HIGH**: Performance degradation, significant cost spike, compliance violation, resource failure
+- 🟡 **MEDIUM**: Resource warnings, capacity approaching limits, optimization opportunities
+- ℹ️ **INFO**: Informational events (aggregated in morning report)
+
+**Setup Process** (During Extend My Laptop Installation):
+
+1. **Add Escher Listener to Source of Truth**:
+   User grants Escher permission to add event listeners to cloud-native alert sources:
+   - **AWS**: CloudWatch Alarms → EventBridge → Extend My Laptop
+   - **Azure**: Azure Monitor Alerts → Event Grid → Extend My Laptop
+   - **GCP**: Cloud Monitoring → Pub/Sub → Extend My Laptop
+
+2. **Pre-Approve Auto-Remediation** (Setup Wizard):
+   User chooses which "first aid" actions Escher can perform automatically:
+   ```
+   ☑️ Automatically make public S3 buckets private
+   ☑️ Automatically stop idle instances after 2 hours
+   ☑️ Automatically enable encryption on unencrypted volumes
+   ☑️ Automatically scale up resources approaching capacity
+   ☐ Automatically restart failed services
+   ☐ Automatically rollback failed deployments
+   ```
+   - User can modify these settings anytime in application settings
+   - Each auto-remediation action logs to immutable audit trail
+
+**Real-Time Alert Flow**:
+
+```
+Critical Event Occurs (e.g., S3 bucket made public)
+↓
+Cloud-Native Alert (CloudWatch/Azure Monitor/GCP Monitoring) detects at source of truth
+↓
+Event published to EventBridge/Event Grid/Pub Sub
+↓
+Extend My Laptop wakes up (Fargate/Container Instance/Cloud Run triggered)
+↓
+Extend My Laptop loads RAG from S3/Blob/GCS:
+├─ Estate: Which S3 bucket? Production or dev? Contains PII?
+├─ Alert Rules: User's configured severity thresholds and customized critical definitions
+├─ Previous Incidents: Similar alerts in past? How resolved?
+└─ Auto-Remediation Settings: Is "make bucket private" pre-approved?
+↓
+Normalize event to unified schema:
+├─ event_type: "s3_bucket_public"
+├─ severity: Auto-calculated based on estate context (PII detected = CRITICAL)
+├─ resource: { bucket_name, region, account_id, tags }
+├─ context: { environment: "production", data_classification: "PII" }
+└─ timestamp: ISO-8601
+↓
+Send unified event + context to AI Server (Escher Brain)
+↓
+AI Server analyzes:
+├─ Severity Assessment: CRITICAL (PII exposed publicly)
+├─ Root Cause: Security group rule changed by user john@company.com at 10:34 AM
+├─ First Aid Recommendation: Make bucket private immediately (aws s3api put-bucket-acl)
+├─ Impact Assessment: ~1.2M customer records exposed, zero downtime to fix
+├─ Playbook: Step-by-step remediation + prevent future occurrences
+└─ Risk: If not fixed within 1 hour, potential GDPR violation
+↓
+Response sent back to Extend My Laptop
+↓
+Decision Point - Is auto-remediation pre-approved?
+├─ YES → Execute immediately:
+│   ├─ Run: aws s3api put-bucket-acl --bucket my-data --acl private
+│   ├─ Verify: Bucket now private ✅
+│   ├─ Store result in RAG (Alerts & Events collection)
+│   └─ Prepare notification: "CRITICAL alert auto-resolved"
+│
+└─ NO → Request approval:
+    ├─ Store alert in RAG
+    └─ Prepare notification: "CRITICAL alert requires approval"
+↓
+Notification via cloud-native services:
+├─ 🔴 CRITICAL: AWS SNS/Azure Notification Hubs/GCP Cloud Messaging
+│   └─ Channels: Email + SMS + Slack/PagerDuty
+├─ 🟠 HIGH: Email + Slack only
+└─ 🟡 MEDIUM: In-app notification banner
+↓
+Store complete alert record in RAG (Alerts & Events collection):
+├─ Event details, AI analysis, action taken, notification sent
+├─ Immutable (cannot be modified after creation)
+└─ Used for queries, comparisons, and compliance reporting
+↓
+Extend My Laptop shuts down (event-based lifecycle)
+```
+
+**Unified Event Schema** (Cross-Cloud Normalization):
+
+All cloud events are normalized to a unified schema before sending to AI Server:
+
+```typescript
+interface UnifiedEvent {
+  event_id: string;
+  event_type: string; // "s3_bucket_public", "vm_stopped", "cost_spike", etc.
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "INFO"; // Auto-calculated or user-customized
+  cloud_provider: "aws" | "azure" | "gcp";
+  account_id: string;
+  region: string;
+  resource: {
+    type: string; // "s3_bucket", "ec2_instance", etc.
+    id: string;
+    name: string;
+    tags: Record<string, string>;
+    metadata: Record<string, any>;
+  };
+  context: {
+    environment?: "production" | "staging" | "dev";
+    data_classification?: "PII" | "confidential" | "public";
+    cost_impact?: number; // USD per day
+    affected_users?: number;
+  };
+  timestamp: string; // ISO-8601
+  raw_event: any; // Original cloud-specific event for reference
+}
+```
+
+**Notification Channels** (Cloud-Native):
+
+- **AWS**: Amazon SNS → Email, SMS, Slack (via webhook), PagerDuty (via integration)
+- **Azure**: Azure Notification Hubs → Email, SMS, Teams, Slack
+- **GCP**: Cloud Messaging → Email, SMS, Slack, PagerDuty
+
+**Local Only Limitation**:
+- Real-time alerts require **Extend My Laptop** for 24/7 monitoring
+- OR laptop must remain **always-on** for Local Only mode
+- Local Only users with always-on can receive real-time alerts via polling (every 1 minute for CRITICAL, every 5 minutes for HIGH)
+
+---
+
+#### **2. Scheduled Scan Alerts** (ℹ️ Can Wait - Interactive Morning Report)
+
+**Purpose**: Proactive monitoring, optimization suggestions, and aggregated insights delivered daily
+
+**Scan Schedule**: Daily at 2am (same as cost/audit sync), user-configurable
+
+**Scans Performed**:
+- 💰 **Cost Analysis**: Spending trends, budget tracking, anomaly detection, waste identification
+- 🔒 **Security Posture**: Compliance checks (CIS, SOC2, HIPAA), policy violations, encryption status
+- ⚡ **Resource Optimization**: Idle resources, rightsizing opportunities, over-provisioned VMs
+- 🔧 **Operational Health**: Backup status, snapshot age, service availability, performance metrics
+- 📊 **Performance Monitoring**: Resource utilization, bottlenecks, capacity planning
+
+**Scheduled Scan Flow**:
+
+```
+2am: Scheduler triggers daily scan (EventBridge/Logic Apps/Cloud Scheduler)
+↓
+Extend My Laptop wakes up (or Physical Laptop if Local Only and online)
+↓
+Execute scans across all clouds in parallel:
+├─ AWS Cost Explorer API (yesterday's costs, budget status)
+├─ Azure Cost Management API (spending trends, anomalies)
+├─ GCP Billing API (cost breakdown, forecasts)
+├─ Security scans (public resources, encryption validation, IAM analysis)
+├─ Performance metrics (CloudWatch, Azure Monitor, GCP Monitoring)
+└─ Resource inventory (idle instances, old snapshots, unattached volumes)
+↓
+Load RAG from S3/Blob/GCS:
+├─ Estate: Current resource inventory for comparison
+├─ Previous Scans: Yesterday's results to calculate deltas
+├─ Alert Rules: User's customized thresholds (e.g., alert if cost > $100 increase)
+├─ Immutable Reports: Historical cost/security data for trend analysis
+└─ Report Templates: User's customized morning report preferences
+↓
+Send scan results + context to AI Server
+↓
+AI Server analyzes:
+├─ Aggregate findings (group similar issues: "5 idle instances" not "Instance 1 idle, Instance 2...")
+├─ Calculate deltas (what changed since yesterday?)
+├─ Prioritize by severity and cost impact (sort by potential savings)
+├─ Generate actionable recommendations (with 1-click fix options)
+├─ Create interactive morning report using user's template
+└─ Format for conversational Q&A (enable "ask me anything" on report)
+↓
+Store report in Immutable Reports (Alerts & Events collection):
+├─ Acts as aggregated data for historical queries and comparisons
+├─ Permanent storage (not deleted after 7 days)
+├─ Enables: "Compare this week vs last week" queries
+└─ Enables: "Show me cost trends over 3 months" analysis
+↓
+Extend My Laptop uploads RAG to S3/Blob/GCS → Shuts down
+↓
+When user opens laptop:
+Display interactive morning report banner with AI-powered Q&A
+```
+
+**Interactive Morning Report** (Better Than Email):
+
+```
+☀️ Good Morning Report - March 15, 2025
+Generated at 2:00 AM | Data current as of 11:59 PM yesterday
+
+────────────────────────────────────────────────────────────
+
+🚨 CRITICAL ALERTS (Last 24h):
+[Highlighted in red background, requires immediate attention]
+
+• Production RDS instance exceeded 90% storage capacity
+  └─ Auto-scaled from 100GB → 150GB ✅ (Cost impact: +$7.50/month)
+  └─ Root cause: Log retention increased from 7 to 30 days
+
+• Security group sg-abc123 opened port 22 to 0.0.0.0/0
+  └─ Auto-remediated: Restricted to company IP range ✅
+  └─ Alert sent to: security@company.com
+
+────────────────────────────────────────────────────────────
+
+💰 COST SUMMARY:
+Yesterday: $1,247 | This Month (MTD): $18,705 | Budget: $25,000
+
++$186 (+17.5%) vs previous day 🔴 Above your threshold ($100)
++$2,450 (+15%) vs last month 🟡 Trending higher
+
+Top Cost Drivers (Yesterday):
+1. EC2 Instances: $567 (+$144 from 3 new m5.2xlarge in production)
+2. RDS: $289 (+$25 from storage auto-scaling)
+3. S3 Storage: $156 (+$12 from new backups)
+
+💡 Potential Savings Identified: $412/month
+
+────────────────────────────────────────────────────────────
+
+📊 TOP CHANGES (Requires Your Attention):
+
+1. 🔴 3 new EC2 instances launched in production
+   • Instance Type: m5.2xlarge (8 vCPU, 32GB RAM)
+   • Cost Impact: +$144/day ($4,320/month)
+   • Launched by: john@company.com at 10:34 AM
+   • Purpose (from tags): "web-tier-scaling"
+   • Status: Currently running
+
+   💬 Ask: "Why were these instances created?"
+   💬 Ask: "Are these still needed?"
+   💬 Ask: "Can we use spot instances instead?"
+
+2. 🟡 RDS snapshot storage increased 25GB
+   • New Size: 125GB (+25GB from yesterday)
+   • Cost Impact: +$2.50/day
+   • Reason: Daily automated snapshots accumulating
+   • Current: 42 snapshots (retention: 30 days)
+
+   💬 Ask: "Can we reduce snapshot retention to 7 days?"
+   💬 Ask: "How much will I save?"
+   🔧 1-Click: Reduce retention to 7 days (saves $18/month)
+
+────────────────────────────────────────────────────────────
+
+🔒 SECURITY & COMPLIANCE:
+
+✅ GOOD NEWS:
+• No public S3 buckets detected
+• All production RDS instances encrypted
+• IAM password policy compliant
+
+⚠️ ATTENTION REQUIRED:
+• 2 unencrypted EBS volumes detected
+  └─ Environment: dev-environment
+  └─ Volumes: vol-abc123 (50GB), vol-def456 (100GB)
+  └─ Risk: Medium (dev data, but may contain test PII)
+
+  💬 Ask: "Show me these volumes"
+  💬 Ask: "What data is on them?"
+  🔧 1-Click: Enable encryption (creates encrypted copy, migrates data)
+
+────────────────────────────────────────────────────────────
+
+⚡ OPTIMIZATION OPPORTUNITIES:
+
+💡 5 idle EC2 instances detected (Potential savings: $203/month)
+• Criteria: CPU < 5% for 7 consecutive days
+• Instances: i-abc123, i-def456, i-ghi789, i-jkl012, i-mno345
+• Environment: dev (3), staging (2)
+
+💬 Ask: "Which instances are idle?"
+💬 Ask: "What are they used for?"
+💬 Ask: "Is it safe to stop them?"
+🔧 Stop All Idle Instances | 🔧 Stop Dev Only | ℹ️ Remind Me Tomorrow
+
+💡 3 over-provisioned VMs (Potential savings: $142/month)
+• Criteria: Average utilization < 30% over 30 days
+• Recommendations:
+  - vm-web-01: m5.2xlarge → m5.xlarge (save $72/month)
+  - vm-api-02: m5.2xlarge → m5.xlarge (save $72/month)
+  - vm-db-staging: db.m5.large → db.t3.medium (save $28/month)
+
+💬 Ask: "Show me utilization graphs"
+💬 Ask: "Will downsizing impact performance?"
+🔧 View Rightsizing Recommendations
+
+💡 67GB of old EBS snapshots (Potential savings: $6.70/month)
+• Criteria: Snapshots older than 90 days, source volume deleted
+• Count: 13 snapshots
+• Total Size: 67GB
+
+💬 Ask: "Are these snapshots safe to delete?"
+🔧 Delete Old Snapshots
+
+────────────────────────────────────────────────────────────
+
+🔧 OPERATIONAL HEALTH:
+
+✅ ALL SYSTEMS OPERATIONAL:
+• All backups successful (42 RDS snapshots, 18 EC2 AMIs)
+• No failed deployments
+• Service availability: 100% uptime
+
+⚠️ MAINTENANCE RECOMMENDED:
+• 1 RDS snapshot older than 30 days (snap-abc123, 5GB, $0.50/month)
+  └─ Recommendation: Delete or archive to S3 Glacier (90% cost reduction)
+
+────────────────────────────────────────────────────────────
+
+💬 ASK ME ANYTHING ABOUT THIS REPORT:
+
+Examples:
+• "Why did spending increase 17%?"
+• "Show me the 5 idle instances"
+• "Which optimizations should I do first?"
+• "Create a playbook to fix all security issues"
+• "Compare costs with last week"
+• "Show me cost breakdown by environment"
+
+Type your question below ↓
+```
+
+**Interactive Q&A on Report**:
+
+User can ask questions about the report conversationally. The AI Server has the complete report context and can answer any question:
+
+```
+User: "Why did spending increase 17%?"
+
+AI Response:
+"Spending increased by $186 (17.5%) yesterday due to three main factors:
+
+1. **3 new EC2 instances in production** (+$144/day = 77% of increase)
+   - Instance IDs: i-0a1b2c3, i-4d5e6f7, i-8g9h0i1
+   - Type: m5.2xlarge (8 vCPU, 32GB RAM) - $0.384/hour each
+   - Launched: Yesterday 10:34 AM by john@company.com
+   - Purpose (from tags): "web-tier-scaling" for Black Friday prep
+   - Running time: 13.5 hours = $15.60 each = $46.80 total (but daily cost will be $144)
+
+2. **RDS storage auto-scaling** (+$25/day = 13% of increase)
+   - Database: prod-db-01 scaled from 100GB → 150GB
+   - Trigger: 90% capacity threshold reached
+   - Root cause: Log retention changed from 7 → 30 days (3.2GB logs/day)
+   - Cost: $0.115/GB-month = $2.50/day additional
+
+3. **Increased S3 storage** (+$12/day = 6% of increase)
+   - New backup policy storing application logs to S3
+   - Data ingested: 960GB over last 24 hours
+   - Cost: $0.023/GB-month = $12/day
+
+💡 **To reduce costs**:
+- If Black Friday prep is complete, stop the 3 EC2 instances (saves $144/day)
+- Reduce RDS log retention to 14 days (saves $10/day)
+- Enable S3 Intelligent-Tiering for logs (saves ~30% = $3.60/day)
+
+**Total potential daily savings: $157.60 ($4,728/month)**
+
+Would you like me to:
+1. Check if the EC2 instances are still needed (analyze current load)?
+2. Create a playbook to optimize these costs?
+3. Schedule automatic shutdown of instances after business hours?"
+```
+
+**Report Customization** (Template Models):
+
+**Default Template** (Escher provides):
+- Comprehensive morning report (shown above)
+- Includes: Critical alerts, cost summary, security, optimization, operational health
+- Format: Concise, scannable, actionable
+- Q&A enabled by default
+
+**User Customization Options**:
+```
+Report Settings:
+├─ Sections to Include:
+│   ☑️ Critical Alerts (always included)
+│   ☑️ Cost Summary
+│   ☑️ Top Changes
+│   ☑️ Security & Compliance
+│   ☑️ Optimization Opportunities
+│   ☑️ Operational Health
+│   ☐ Performance Metrics (optional, adds detailed graphs)
+│
+├─ Thresholds:
+│   • Cost increase alert: >$100 or >10% (customizable)
+│   • Idle instance: <5% CPU for 7 days (customizable)
+│   • Old snapshot: >90 days (customizable)
+│
+├─ Focus Areas:
+│   ○ Balanced (default - equal weight to all areas)
+│   ○ Cost-Focused (emphasize savings opportunities)
+│   ○ Security-Focused (emphasize compliance and vulnerabilities)
+│   ○ Operational-Focused (emphasize uptime and performance)
+│
+├─ Format:
+│   ○ Detailed (default - shown above, ~50 lines)
+│   ○ Compact (summary only, ~20 lines)
+│   ○ Executive (high-level metrics + top 3 issues, ~15 lines)
+│
+└─ Severity Customization:
+    • Define what's "CRITICAL" for your organization:
+      ☑️ Any public S3 bucket
+      ☑️ Budget overrun >$1000
+      ☐ Any unencrypted volume (default: only production)
+      ☑️ Production database >85% capacity
+```
+
+**Template Storage**: Stored in RAG (Alerts & Events collection), synced across devices
+
+**Deployment Model Differences**:
+- **Local Only**: Scans run on physical laptop (must be online at 2am or miss that day's report)
+- **Extend My Laptop**: Scans run in cloud reliably every day, report ready when user wakes up
 
 ---
 
@@ -387,6 +816,7 @@ Physical Laptop:
   2. **Chat History**: Conversational history with AI
   3. **Executed Operations**: History of operations executed
   4. **Immutable Reports**: Cost reports, audit logs, compliance reports (to avoid repeated API calls)
+  5. **Alerts & Events**: Alert rules, alert history, scan results, auto-remediation settings, report templates, morning reports
 - **Purpose**: Provides context to AI Server queries, enables offline operation documentation
 - **Storage**:
   - **Local Only**: Local vector store on laptop + periodic backup snapshots to S3/Blob/GCS (hourly, configurable)
@@ -407,8 +837,15 @@ Physical Laptop:
 
 **Daily Sync for Manager Persona:**
 - **Scheduled Job**: Daily sync at user-configured time (default: 2am)
-- **Syncs**: Cost data, audit logs, compliance reports to vector store
-- **Benefit**: Manager wakes up to fresh data without manual refresh
+- **Syncs**:
+  - Cost data (AWS Cost Explorer, Azure Cost Management, GCP Billing APIs)
+  - Audit logs (all operations executed)
+  - Compliance reports (CIS benchmarks, policy violations)
+  - **Security scans** (public resources, encryption status, IAM analysis)
+  - **Idle resource detection** (unused instances, volumes, snapshots)
+  - **Performance monitoring** (resource utilization, bottlenecks)
+  - **Interactive morning report generation** (aggregated insights with AI-powered Q&A)
+- **Benefit**: Manager wakes up to fresh data and actionable morning report without manual refresh
 - **Cost Optimization**: Single daily API call instead of repeated queries
 
 **Server-Side RAG (Escher AI Server):**
@@ -615,6 +1052,35 @@ Every request is independent. The AI Server has no memory between requests.
 
 ---
 
+### 9. **Alerts & Monitoring**
+
+**Real-Time Operational Alerts** (🚨 Can't Wait):
+- Critical event detection (production outages, security breaches, budget overruns)
+- Cloud-native alert sources (CloudWatch, Azure Monitor, GCP Monitoring)
+- Escher listener added to source of truth (EventBridge/Event Grid/Pub Sub)
+- Auto-remediation with pre-approved first aid options (configured during installation)
+- Multi-channel notifications (email, SMS, Slack, PagerDuty) via cloud-native services
+- Severity-based routing (Critical → immediate, High → email, Medium → in-app, Info → morning report)
+- Unified event schema for cross-cloud normalization
+
+**Scheduled Scan Alerts** (ℹ️ Can Wait - Morning Report):
+- Daily proactive scans (cost, security, optimization, operational health)
+- Interactive morning report (better than email - ask questions on report)
+- AI-powered aggregation and prioritization
+- Template-based customization (default provided, user can modify)
+- Actionable recommendations with 1-click fixes
+- Permanent storage in vector store for historical queries and comparisons
+
+**Implementation**:
+- **Real-Time**: Event subscriptions at source (EventBridge/Event Grid/Pub Sub) → Extend My Laptop
+- **Scheduled**: Daily scans at 2am (configurable), results in morning report
+- **Storage**: Alerts & Events collection in RAG (alert rules, history, templates, morning reports)
+- **Notification**: Cloud-native services (SNS, Notification Hubs, Cloud Messaging)
+- **Auto-remediation**: Pre-approved during installation, modifiable in settings
+- **Local Only Limitation**: Requires laptop always-on for real-time alerts
+
+---
+
 ## Architecture Questions to Resolve
 
 ### ✅ **Resolved - Deployment & Execution**
@@ -762,10 +1228,15 @@ Every request is independent. The AI Server has no memory between requests.
 - Multi-cloud management from single Extend My Laptop
 - Rust execution engine for operations (playbooks, CLI commands, shell scripts)
 - **Immutable reports in vector store** (cost, audit logs, compliance)
-- **Daily sync for Manager persona** (cost + audit logs at 2am)
-- **Client-side RAG** with 4 collections (estate, chat, operations, immutable reports)
+- **Daily sync for Manager persona** (cost + audit logs + security scans + morning report at 2am)
+- **Client-side RAG** with 5 collections (estate, chat, operations, immutable reports, **alerts & events**)
 - **Server-side RAG** with playbook library and cloud operations knowledge
 - **V2 release plan** for optional central immutable reports
+- **Alert & Event Handling**:
+  - Real-time operational alerts (Escher listener at source, auto-remediation, cloud-native notifications)
+  - Scheduled scan alerts (daily scans, interactive morning report with AI-powered Q&A)
+  - Unified event schema for cross-cloud normalization
+  - Permanent storage in vector store for historical analysis
 
 ### 🟡 **Partially Defined - Need Details**
 - Multi-account/subscription/project credential management
