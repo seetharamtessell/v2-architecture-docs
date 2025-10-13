@@ -1,4 +1,4 @@
-# Escher - Cloud Operations Management Platform
+# Escher - Multi-Cloud Operations Management Platform
 ## Product Vision & Architecture Goals
 
 **Last Updated**: October 2025
@@ -8,14 +8,16 @@
 
 ## Product Overview
 
-**Escher** is a Cloud Operations AI Platform that enables users to manage AWS cloud operations through conversational interface.
+**Escher** is a Multi-Cloud Operations AI Platform that enables users to manage cloud operations across **AWS, Azure, and GCP** through a unified conversational interface.
 
 ### Core Philosophy
+- **Multi-Cloud Support**: Single platform for AWS, Azure, GCP (and future cloud providers)
 - **Conversational Management**: Natural language interface for all cloud operations
-- **Client-Side State**: AWS estate, chat history, and credentials remain on customer's machine
+- **Unified Experience**: Consistent interface across all cloud providers
+- **Client-Side State**: Cloud estate, chat history, and credentials remain on customer's machine
 - **Client-Side Execution**: Operations execute from client using customer's credentials
-- **Privacy First**: No AWS credentials or estate data stored on server
-- **AI-Powered Intelligence**: Server provides operations knowledge, recommendations, and playbook generation
+- **Privacy First**: No cloud credentials or estate data stored on server
+- **AI-Powered Intelligence**: Server provides cloud-agnostic operations knowledge, recommendations, and playbook generation
 
 ---
 
@@ -40,14 +42,17 @@
 ## Cloud Management Operations
 
 ### 1. **Resource Operations** (Day-to-day)
-- Start/Stop/Restart resources (EC2, RDS, Lambda, etc.)
-- Resize/Scale resources (instance types, storage, compute)
-- Create/Delete resources
-- Configure resources (security groups, tags, settings)
-- Backup/Restore operations
-- Snapshot management
+- **Start/Stop/Restart** resources
+  - AWS: EC2, RDS, Lambda
+  - Azure: VMs, SQL Database, Functions
+  - GCP: Compute Engine, Cloud SQL, Cloud Functions
+- **Resize/Scale** resources (instance types, storage, compute)
+- **Create/Delete** resources
+- **Configure** resources (firewall rules, tags, settings)
+- **Backup/Restore** operations
+- **Snapshot management**
 
-**Execution**: Client-side with user credentials
+**Execution**: Client-side with user credentials (cloud-specific SDKs/APIs)
 
 ---
 
@@ -113,17 +118,20 @@
 
 ---
 
-### 6. **Multi-Account Management**
-- **Org-Level Visibility**: All accounts in unified view
-- **Cross-Account Operations**: Batch operations across accounts
-- **Consolidated Reporting**: Org-wide costs, compliance, security
-- **Centralized Policy Enforcement**: Consistent policies across accounts
-- **Account Governance**: Account creation, access management
+### 6. **Multi-Account/Subscription/Project Management**
+- **Org-Level Visibility**: All cloud accounts/subscriptions/projects in unified view
+  - AWS: Organizations, Accounts
+  - Azure: Management Groups, Subscriptions
+  - GCP: Organizations, Projects
+- **Cross-Account Operations**: Batch operations across cloud boundaries
+- **Consolidated Reporting**: Org-wide costs, compliance, security across all clouds
+- **Centralized Policy Enforcement**: Consistent policies across all cloud providers
+- **Account Governance**: Account/subscription/project creation, access management
 
 **Key Questions**:
 - [ ] How many accounts per customer typically?
-- [ ] Role-based access control per account?
-- [ ] Cross-account assume role patterns?
+- [ ] Role-based access control per account/cloud?
+- [ ] Cross-account assume role patterns (AWS), Service Principals (Azure), Service Accounts (GCP)?
 
 ---
 
@@ -142,12 +150,17 @@
 ---
 
 ### 8. **AI-Powered Operations**
-- **Conversational Queries**: "What's my biggest cost driver?", "Show me all public S3 buckets"
-- **Smart Recommendations**: AI suggests optimizations based on usage patterns
-- **Anomaly Detection**: Unusual spending, security events, performance issues
-- **Playbook Generation**: AI creates multi-step operation plans
-- **Natural Language Execution**: "Stop all dev instances in us-east-1"
-- **Context-Aware Responses**: Understands user's AWS estate and history
+- **Conversational Queries**:
+  - "What's my biggest cost driver across all clouds?"
+  - "Show me all public storage buckets" (S3, Blob Storage, Cloud Storage)
+  - "Which VMs are underutilized?"
+- **Smart Recommendations**: AI suggests cloud-specific optimizations
+- **Anomaly Detection**: Unusual spending, security events, performance issues across all clouds
+- **Playbook Generation**: AI creates multi-step, multi-cloud operation plans
+- **Natural Language Execution**:
+  - "Stop all dev VMs in Azure West US"
+  - "Enable encryption on all GCP buckets in project X"
+- **Context-Aware Responses**: Understands user's complete multi-cloud estate
 
 **Current**: Server-side AI with client-side context enrichment
 
