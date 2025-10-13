@@ -102,10 +102,40 @@ Cloud Schedulers + Execution + State ←--┘
   - Auto-stops after idle period
 
 **Data Flows**:
-1. **User Query**: Physical Laptop → Escher AI Server → AI response → Physical Laptop
-2. **Interactive Execution**: Physical Laptop → Extend My Laptop → Cloud APIs → Results → State Storage (S3/Blob/GCS)
-3. **Scheduled Execution**: Scheduler (EventBridge/etc) → Extend My Laptop → Cloud APIs → Results → State Storage
-4. **State Sync**: Physical Laptop pulls latest state from Extend My Laptop storage
+
+1. **Interactive Query Flow** (Local Only):
+   ```
+   User Query → Physical Laptop searches RAG → Sends query + context to AI Server
+   → AI Server processes → Returns response (information/execution/report)
+   → Physical Laptop executes locally → Stores results in local RAG
+   → Periodic backup to S3/Blob/GCS (hourly)
+   ```
+
+2. **Interactive Query Flow** (Extend My Laptop):
+   ```
+   User Query → Physical Laptop searches local RAG → Sends query + context to AI Server
+   → AI Server processes → Returns response
+   → Physical Laptop sends execution request to Extend My Laptop
+   → Extend My Laptop executes → Stores results in S3/Blob/GCS RAG
+   → Physical Laptop syncs latest state from S3/Blob/GCS
+   ```
+
+3. **Scheduled Execution Flow** (Extend My Laptop only):
+   ```
+   Scheduler (EventBridge/Logic Apps/Cloud Scheduler) triggers at scheduled time
+   → Extend My Laptop starts (Fargate/Container Instance/Cloud Run)
+   → Loads RAG from S3/Blob/GCS (estate, chat history, previous executions)
+   → Sends query + context to AI Server
+   → AI Server returns execution plan
+   → Extend My Laptop executes operations → Cloud APIs
+   → Stores results in RAG → Uploads RAG to S3/Blob/GCS
+   → Extend My Laptop shuts down (event-based lifecycle)
+   ```
+
+4. **State Synchronization**:
+   - **Local Only**: Periodic backup from local RAG to S3/Blob/GCS (hourly, configurable)
+   - **Extend My Laptop**: Physical Laptop pulls latest state from S3/Blob/GCS on demand or periodically
+   - **Single Source of Truth**: Local RAG (Local Only) or S3/Blob/GCS RAG (Extend My Laptop)
 
 **Multi-Cloud Management**:
 - Extend My Laptop (e.g., on AWS) manages **all clouds** (AWS + Azure + GCP)
