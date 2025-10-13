@@ -234,8 +234,6 @@ Escher AI Server:
 
 Escher AI Server → Physical/Extend My Laptop:
 ├─ Response Type: "execution"
-├─ Risk Level: "high"
-├─ Requires Approval: true (if Manager persona)
 ├─ Execution Plan:
 │   ├─ Step 1: List EC2 instances with tag=dev in us-east-1 (5 instances found)
 │   ├─ Step 2: Confirm instances with user
@@ -244,10 +242,12 @@ Escher AI Server → Physical/Extend My Laptop:
 
 Physical/Extend My Laptop Rust Execution Engine:
 ├─ Display execution plan to user
-├─ Request confirmation (if high-risk)
+├─ Request user confirmation
 ├─ Execute playbook steps
 ├─ Store results in RAG (Executed Operations collection)
 └─ Store audit log in RAG (Immutable Reports collection)
+
+**Note**: Risk levels and approval workflows are not yet designed (see Collaboration & Approval Workflows section)
 ```
 
 #### **3. Scheduled Job Flow (Extend My Laptop → AI Server)**
