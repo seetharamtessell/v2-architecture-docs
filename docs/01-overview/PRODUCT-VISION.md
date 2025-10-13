@@ -6,6 +6,18 @@
 
 ---
 
+## **🔐 Critical Architecture Principle**
+
+**⚠️ ESCHER AI SERVER IS 100% STATELESS - REGARDLESS OF DEPLOYMENT MODEL**
+
+Whether user chooses **Local Only** or **Extended Laptop** deployment:
+- **Escher AI Server stores NOTHING**: No user data, no cloud estate, no credentials, no chat history, no state
+- **Escher AI Server is a pure processing engine**: Receives requests → Processes with RAG → Returns responses → Forgets everything
+- **All state resides with the user**: On physical laptop (Local Only) or in user's cloud (Extended Laptop)
+- **Privacy guarantee**: User's cloud estate and credentials NEVER leave user's control
+
+---
+
 ## Product Overview
 
 **Escher** is a Multi-Cloud Operations AI Platform that enables users to manage cloud operations across **AWS, Azure, and GCP** through a unified conversational interface.
@@ -123,6 +135,213 @@ Users can switch between models:
 - Start with **Local Only** for simplicity
 - Upgrade to **Extended Laptop** when they need scheduling/automation
 - Downgrade back to **Local Only** anytime (Extended Laptop infrastructure can be destroyed)
+
+---
+
+## Escher AI Server Architecture
+
+### **Stateless Processing Engine**
+
+The Escher AI Server is a **pure stateless processing engine** - it receives requests, processes them using RAG (Retrieval-Augmented Generation), and returns responses without storing any user data.
+
+### **Server Capabilities**
+
+**Built-in RAG Knowledge Base:**
+- **Playbook Library**: Comprehensive library of cloud operation playbooks (AWS, Azure, GCP)
+- **CLI Command Database**: Complete reference of cloud CLI commands and their usage
+- **Best Practices**: Cloud architecture patterns, security guidelines, cost optimization strategies
+- **Multi-Cloud Operations**: Cross-cloud equivalents and migration patterns
+
+**AI Processing:**
+- Natural language understanding (user intent extraction)
+- Context-aware response generation
+- Operation planning and sequencing
+- Playbook generation and customization
+- Anomaly detection and recommendations
+
+### **Data Flow Details**
+
+#### **1. Interactive Query Flow (Physical/Extended Laptop → AI Server)**
+
+```
+User: "Show me all running EC2 instances in us-east-1"
+
+Physical/Extended Laptop → Escher AI Server:
+├─ Query: "Show me all running EC2 instances in us-east-1"
+└─ Context: Current cloud estate snapshot (anonymized resource inventory)
+
+Escher AI Server Processing:
+├─ Parse intent: List resources
+├─ Identify scope: EC2, us-east-1, running state
+├─ RAG lookup: EC2 list commands/APIs
+├─ Generate response type: Information query (not execution)
+└─ Return structured response
+
+Escher AI Server → Physical/Extended Laptop:
+├─ Response Type: "information" | "execution" | "report"
+├─ Operation: { type: "list_ec2", filters: { region: "us-east-1", state: "running" } }
+└─ Suggested Display: Table format with instance details
+
+Physical/Extended Laptop:
+├─ If type = "information": Query cloud APIs locally, display results
+├─ If type = "execution": Execute operation with Rust execution engine
+└─ If type = "report": Generate report and store locally/S3
+```
+
+**Key Points:**
+- **User's cloud estate is sent to AI Server for context** (necessary for intelligent responses)
+- **AI Server processes and returns response immediately** - does not store the estate
+- **Privacy preserved**: AI Server never stores cloud estate, credentials, or chat history
+
+#### **2. Execution Flow (User → AI Server → Execution)**
+
+```
+User: "Stop all dev EC2 instances in us-east-1"
+
+Physical/Extended Laptop → Escher AI Server:
+├─ Query: "Stop all dev EC2 instances in us-east-1"
+└─ Context: Cloud estate (including list of dev instances)
+
+Escher AI Server:
+├─ Intent: Stop resources
+├─ Scope: EC2, us-east-1, tag=dev
+├─ RAG lookup: Stop EC2 playbook
+├─ Safety check: High-risk operation (stops multiple instances)
+└─ Generate execution plan
+
+Escher AI Server → Physical/Extended Laptop:
+├─ Response Type: "execution"
+├─ Risk Level: "high"
+├─ Requires Approval: true (if Manager persona)
+├─ Execution Plan:
+│   ├─ Step 1: List EC2 instances with tag=dev in us-east-1
+│   ├─ Step 2: Confirm instances with user
+│   └─ Step 3: Stop instances (AWS CLI: aws ec2 stop-instances --instance-ids ...)
+└─ Estimated Impact: 5 instances affected
+
+Physical/Extended Laptop Rust Execution Engine:
+├─ Display execution plan to user
+├─ Request confirmation (if high-risk)
+├─ Execute playbook steps
+└─ Store results in local state or S3/Blob/GCS
+```
+
+#### **3. Scheduled Job Flow (Extended Laptop → AI Server)**
+
+```
+Scheduled Job: "Stop all dev VMs at 8pm daily"
+
+EventBridge/Cloud Scheduler → Extended Laptop (Fargate/Container Instance/Cloud Run)
+└─ Trigger: Scheduled job execution
+
+Extended Laptop → Escher AI Server:
+├─ Query: "Execute scheduled job: Stop all dev VMs"
+└─ Context: Current cloud estate snapshot (fetched from S3/Blob/GCS)
+
+Escher AI Server:
+├─ Intent: Execute scheduled operation
+├─ RAG lookup: Stop VMs playbook (multi-cloud)
+├─ Generate execution plan for all clouds (AWS EC2, Azure VMs, GCP Compute Engine)
+└─ Return structured operations
+
+Escher AI Server → Extended Laptop:
+├─ Response Type: "execution"
+├─ Multi-Cloud Operations:
+│   ├─ AWS: aws ec2 stop-instances --instance-ids i-xxx, i-yyy
+│   ├─ Azure: az vm stop --resource-group dev --name vm1, vm2
+│   └─ GCP: gcloud compute instances stop vm1 vm2 --zone=us-central1-a
+└─ Expected Results: 15 VMs stopped (5 AWS, 6 Azure, 4 GCP)
+
+Extended Laptop Rust Execution Engine:
+├─ Execute multi-cloud operations in parallel
+├─ Store results in S3/Blob/GCS
+├─ Store audit logs
+└─ Shutdown (event-based lifecycle)
+```
+
+#### **4. Playbook Generation Flow**
+
+```
+User: "Create a disaster recovery playbook for my production environment"
+
+Physical Laptop → Escher AI Server:
+├─ Query: "Create a disaster recovery playbook for my production environment"
+└─ Context: Production environment inventory (RDS, EC2, S3, ALB configurations)
+
+Escher AI Server:
+├─ Intent: Generate playbook
+├─ RAG lookup: DR best practices, backup strategies, multi-region patterns
+├─ Analyze context: Identify critical resources
+└─ Generate custom playbook
+
+Escher AI Server → Physical Laptop:
+├─ Response Type: "playbook"
+├─ Playbook Name: "Production DR Playbook"
+├─ Steps:
+│   ├─ Step 1: Enable automated RDS snapshots (daily)
+│   ├─ Step 2: Replicate S3 buckets to backup region
+│   ├─ Step 3: Create AMIs of critical EC2 instances
+│   ├─ Step 4: Configure cross-region ALB with health checks
+│   ├─ Step 5: Set up Route53 failover routing
+│   └─ Step 6: Test failover procedure monthly
+├─ Estimated Cost: $X/month
+└─ Compliance: Meets RTO=4h, RPO=1h requirements
+
+Physical Laptop:
+├─ Display playbook to user
+├─ User reviews/modifies playbook
+├─ Store playbook locally or in S3/Blob/GCS
+└─ User can execute playbook on-demand or schedule it
+```
+
+**Playbook Management:**
+- **Escher Playbook Library**: Server provides pre-built playbooks via RAG
+- **User Playbooks**: Users can create/modify playbooks and store them locally or in their cloud
+- **Playbook Override**: User playbooks override Escher-provided playbooks
+- **Playbook Storage**: Local (Local Only mode) or S3/Blob/GCS (Extended Laptop mode)
+
+### **RAG Architecture**
+
+**Client-Side RAG (Physical/Extended Laptop - Rust):**
+- **Local Knowledge Base**: User's cloud estate inventory, chat history, executed operations
+- **Purpose**: Provides context to AI Server queries, enables offline operation documentation
+- **Storage**: Local database (Local Only) or S3/Blob/GCS (Extended Laptop)
+
+**Server-Side RAG (Escher AI Server):**
+- **Global Knowledge Base**: All cloud provider APIs, CLI commands, playbooks, best practices
+- **Purpose**: Provides cloud operations expertise and generates intelligent responses
+- **Updates**: Escher continuously updates with new cloud features, best practices, security advisories
+
+**Combined Power:**
+- Client RAG provides user-specific context
+- Server RAG provides cloud operations expertise
+- Together they enable intelligent, context-aware, multi-cloud operations
+
+### **Privacy & Security Model**
+
+**What AI Server Receives:**
+- ✅ Natural language queries
+- ✅ Cloud estate snapshots (for context - processed transiently, not stored)
+- ✅ Operation results (for generating recommendations - processed transiently)
+
+**What AI Server NEVER Receives:**
+- ❌ Cloud credentials (AWS keys, Azure service principals, GCP service accounts)
+- ❌ Sensitive data from cloud resources (database contents, file contents, secrets)
+- ❌ User identity information
+
+**What AI Server NEVER Stores:**
+- ❌ User data
+- ❌ Cloud estate information
+- ❌ Chat history
+- ❌ Operation history
+- ❌ Any user-specific state
+
+**Processing Model:**
+```
+Request arrives → Load from RAG → Process with LLM → Generate response → Return → Forget everything
+```
+
+Every request is independent. The AI Server has no memory between requests.
 
 ---
 
