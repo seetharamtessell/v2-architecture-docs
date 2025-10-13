@@ -10,10 +10,10 @@
 
 **⚠️ ESCHER AI SERVER IS 100% STATELESS - REGARDLESS OF DEPLOYMENT MODEL**
 
-Whether user chooses **Local Only** or **Extended Laptop** deployment:
+Whether user chooses **Local Only** or **Extend My Laptop** deployment:
 - **Escher AI Server stores NOTHING**: No user data, no cloud estate, no credentials, no chat history, no state
 - **Escher AI Server is a pure processing engine**: Receives requests → Processes with RAG → Returns responses → Forgets everything
-- **All state resides with the user**: On physical laptop (Local Only) or in user's cloud (Extended Laptop)
+- **All state resides with the user**: On physical laptop (Local Only) or in user's cloud (Extend My Laptop)
 - **Privacy guarantee**: User's cloud estate and credentials NEVER leave user's control
 
 ---
@@ -59,7 +59,7 @@ Escher offers **two deployment models** to meet different user needs:
 
 ---
 
-### **Model 2: Extended Laptop** (Main Release / Power Users)
+### **Model 2: Extend My Laptop** (Main Release / Power Users)
 
 **Target Users**: Teams with scheduled operations, long-running tasks, 24/7 requirements
 
@@ -67,7 +67,7 @@ Escher offers **two deployment models** to meet different user needs:
 ```
 Physical Laptop (Tauri App) ←→ Escher AI Server (Stateless Brain)
         ↓↑                              ↑
-Extended Laptop (User's Cloud)          |
+Extend My Laptop (User's Cloud)          |
         ↓                                |
 Cloud Schedulers + Execution + State ←--┘
 ```
@@ -82,38 +82,38 @@ Cloud Schedulers + Execution + State ←--┘
 
 **Setup Process**:
 1. User chooses "Extend to Cloud" from physical laptop
-2. User selects cloud provider for Extended Laptop (AWS, Azure, or GCP)
+2. User selects cloud provider for Extend My Laptop (AWS, Azure, or GCP)
 3. Physical laptop uses **user's local credentials** to provision infrastructure in **user's account**:
    - Deploys **Escher-provided container image** (Rust execution engine + cloud CLIs)
    - Creates scheduler (EventBridge/Logic Apps/Cloud Scheduler)
    - Creates state storage (S3/Blob/GCS buckets)
    - Creates credential storage (SSM/Key Vault/Secret Manager)
-4. User **installs cloud credentials** in Extended Laptop (just like local laptop - AWS CLI configure, Azure CLI login, gcloud auth)
-5. Physical laptop becomes thin client, Extended Laptop is single source of truth
+4. User **installs cloud credentials** in Extend My Laptop (just like local laptop - AWS CLI configure, Azure CLI login, gcloud auth)
+5. Physical laptop becomes thin client, Extend My Laptop is single source of truth
 
 **Execution Model**:
 - **Physical Laptop**: Interactive operations, ad-hoc queries, real-time tasks
-- **Extended Laptop**: Scheduled operations, long-running tasks, automation, reports
-- **Event-Based Lifecycle**: Extended Laptop starts on-demand, stops when idle (cost optimization)
-  - Scheduler triggers wake up Extended Laptop for scheduled jobs
-  - Long-running operations keep Extended Laptop alive until completion
+- **Extend My Laptop**: Scheduled operations, long-running tasks, automation, reports
+- **Event-Based Lifecycle**: Extend My Laptop starts on-demand, stops when idle (cost optimization)
+  - Scheduler triggers wake up Extend My Laptop for scheduled jobs
+  - Long-running operations keep Extend My Laptop alive until completion
   - Auto-stops after idle period
 
 **Data Flows**:
 1. **User Query**: Physical Laptop → Escher AI Server → AI response → Physical Laptop
-2. **Interactive Execution**: Physical Laptop → Extended Laptop → Cloud APIs → Results → State Storage (S3/Blob/GCS)
-3. **Scheduled Execution**: Scheduler (EventBridge/etc) → Extended Laptop → Cloud APIs → Results → State Storage
-4. **State Sync**: Physical Laptop pulls latest state from Extended Laptop storage
+2. **Interactive Execution**: Physical Laptop → Extend My Laptop → Cloud APIs → Results → State Storage (S3/Blob/GCS)
+3. **Scheduled Execution**: Scheduler (EventBridge/etc) → Extend My Laptop → Cloud APIs → Results → State Storage
+4. **State Sync**: Physical Laptop pulls latest state from Extend My Laptop storage
 
 **Multi-Cloud Management**:
-- Extended Laptop (e.g., on AWS) manages **all clouds** (AWS + Azure + GCP)
-- User installs credentials for all clouds in Extended Laptop's credential store
-- Example: AWS Fargate Extended Laptop with AWS credentials (SSM) + Azure Service Principal (SSM) + GCP Service Account (SSM)
+- Extend My Laptop (e.g., on AWS) manages **all clouds** (AWS + Azure + GCP)
+- User installs credentials for all clouds in Extend My Laptop's credential store
+- Example: AWS Fargate Extend My Laptop with AWS credentials (SSM) + Azure Service Principal (SSM) + GCP Service Account (SSM)
 
 **Escher AI Server Role**:
 - **100% Stateless**: Stores nothing about users, no credentials, no state
 - **Provides**: LLM responses, operation suggestions, playbook generation, AI intelligence
-- **Communication**: Physical Laptop ↔ AI Server (for conversational AI), Extended Laptop ↔ AI Server (for scheduled job intelligence)
+- **Communication**: Physical Laptop ↔ AI Server (for conversational AI), Extend My Laptop ↔ AI Server (for scheduled job intelligence)
 
 **Pros**:
 - 24/7 operations without laptop online
@@ -133,8 +133,8 @@ Cloud Schedulers + Execution + State ←--┘
 
 Users can switch between models:
 - Start with **Local Only** for simplicity
-- Upgrade to **Extended Laptop** when they need scheduling/automation
-- Downgrade back to **Local Only** anytime (Extended Laptop infrastructure can be destroyed)
+- Upgrade to **Extend My Laptop** when they need scheduling/automation
+- Downgrade back to **Local Only** anytime (Extend My Laptop infrastructure can be destroyed)
 
 ---
 
@@ -161,12 +161,12 @@ The Escher AI Server is a **pure stateless processing engine** - it receives req
 
 ### **Data Flow Details**
 
-#### **1. Interactive Query Flow (Physical/Extended Laptop → AI Server)**
+#### **1. Interactive Query Flow (Physical/Extend My Laptop → AI Server)**
 
 ```
 User: "Show me all running EC2 instances in us-east-1"
 
-Physical/Extended Laptop → Escher AI Server:
+Physical/Extend My Laptop → Escher AI Server:
 ├─ Query: "Show me all running EC2 instances in us-east-1"
 └─ Context: Current cloud estate snapshot (anonymized resource inventory)
 
@@ -177,12 +177,12 @@ Escher AI Server Processing:
 ├─ Generate response type: Information query (not execution)
 └─ Return structured response
 
-Escher AI Server → Physical/Extended Laptop:
+Escher AI Server → Physical/Extend My Laptop:
 ├─ Response Type: "information" | "execution" | "report"
 ├─ Operation: { type: "list_ec2", filters: { region: "us-east-1", state: "running" } }
 └─ Suggested Display: Table format with instance details
 
-Physical/Extended Laptop:
+Physical/Extend My Laptop:
 ├─ If type = "information": Query cloud APIs locally, display results
 ├─ If type = "execution": Execute operation with Rust execution engine
 └─ If type = "report": Generate report and store locally/S3
@@ -198,7 +198,7 @@ Physical/Extended Laptop:
 ```
 User: "Stop all dev EC2 instances in us-east-1"
 
-Physical/Extended Laptop → Escher AI Server:
+Physical/Extend My Laptop → Escher AI Server:
 ├─ Query: "Stop all dev EC2 instances in us-east-1"
 └─ Context: Cloud estate (including list of dev instances)
 
@@ -209,7 +209,7 @@ Escher AI Server:
 ├─ Safety check: High-risk operation (stops multiple instances)
 └─ Generate execution plan
 
-Escher AI Server → Physical/Extended Laptop:
+Escher AI Server → Physical/Extend My Laptop:
 ├─ Response Type: "execution"
 ├─ Risk Level: "high"
 ├─ Requires Approval: true (if Manager persona)
@@ -219,22 +219,22 @@ Escher AI Server → Physical/Extended Laptop:
 │   └─ Step 3: Stop instances (AWS CLI: aws ec2 stop-instances --instance-ids ...)
 └─ Estimated Impact: 5 instances affected
 
-Physical/Extended Laptop Rust Execution Engine:
+Physical/Extend My Laptop Rust Execution Engine:
 ├─ Display execution plan to user
 ├─ Request confirmation (if high-risk)
 ├─ Execute playbook steps
 └─ Store results in local state or S3/Blob/GCS
 ```
 
-#### **3. Scheduled Job Flow (Extended Laptop → AI Server)**
+#### **3. Scheduled Job Flow (Extend My Laptop → AI Server)**
 
 ```
 Scheduled Job: "Stop all dev VMs at 8pm daily"
 
-EventBridge/Cloud Scheduler → Extended Laptop (Fargate/Container Instance/Cloud Run)
+EventBridge/Cloud Scheduler → Extend My Laptop (Fargate/Container Instance/Cloud Run)
 └─ Trigger: Scheduled job execution
 
-Extended Laptop → Escher AI Server:
+Extend My Laptop → Escher AI Server:
 ├─ Query: "Execute scheduled job: Stop all dev VMs"
 └─ Context: Current cloud estate snapshot (fetched from S3/Blob/GCS)
 
@@ -244,7 +244,7 @@ Escher AI Server:
 ├─ Generate execution plan for all clouds (AWS EC2, Azure VMs, GCP Compute Engine)
 └─ Return structured operations
 
-Escher AI Server → Extended Laptop:
+Escher AI Server → Extend My Laptop:
 ├─ Response Type: "execution"
 ├─ Multi-Cloud Operations:
 │   ├─ AWS: aws ec2 stop-instances --instance-ids i-xxx, i-yyy
@@ -252,7 +252,7 @@ Escher AI Server → Extended Laptop:
 │   └─ GCP: gcloud compute instances stop vm1 vm2 --zone=us-central1-a
 └─ Expected Results: 15 VMs stopped (5 AWS, 6 Azure, 4 GCP)
 
-Extended Laptop Rust Execution Engine:
+Extend My Laptop Rust Execution Engine:
 ├─ Execute multi-cloud operations in parallel
 ├─ Store results in S3/Blob/GCS
 ├─ Store audit logs
@@ -298,14 +298,37 @@ Physical Laptop:
 - **Escher Playbook Library**: Server provides pre-built playbooks via RAG
 - **User Playbooks**: Users can create/modify playbooks and store them locally or in their cloud
 - **Playbook Override**: User playbooks override Escher-provided playbooks
-- **Playbook Storage**: Local (Local Only mode) or S3/Blob/GCS (Extended Laptop mode)
+- **Playbook Storage**: Local (Local Only mode) or S3/Blob/GCS (Extend My Laptop mode)
 
 ### **RAG Architecture**
 
-**Client-Side RAG (Physical/Extended Laptop - Rust):**
-- **Local Knowledge Base**: User's cloud estate inventory, chat history, executed operations
+**Client-Side RAG (Physical/Extend My Laptop - Rust):**
+- **Local Knowledge Base Collections**:
+  1. **Cloud Estate Inventory**: Current resource inventory across all clouds
+  2. **Chat History**: Conversational history with AI
+  3. **Executed Operations**: History of operations executed
+  4. **Immutable Reports**: Cost reports, audit logs, compliance reports (to avoid repeated API calls)
 - **Purpose**: Provides context to AI Server queries, enables offline operation documentation
-- **Storage**: Local database (Local Only) or S3/Blob/GCS (Extended Laptop)
+- **Storage**: Local vector store (Local Only) or S3/Blob/GCS vector store (Extend My Laptop)
+
+**Immutable Reports Collection:**
+- **Cost Reports**: Daily snapshots of AWS Cost Explorer, Azure Cost Management, GCP Billing data
+  - Prevents repeated API calls (reduces cost)
+  - Historical cost analysis without hitting cloud APIs
+  - Daily sync scheduled (Manager persona gets updated cost data automatically)
+- **Audit Logs**: Immutable log of all operations
+  - Daily sync ensures Manager has complete audit trail
+  - Cannot be modified after creation (compliance requirement)
+  - Stored in vector store for fast retrieval and AI analysis
+- **Compliance Reports**: Security scans, policy violations, CIS benchmark results
+  - Generated on-demand or scheduled
+  - Stored in vector store for historical comparison
+
+**Daily Sync for Manager Persona:**
+- **Scheduled Job**: Daily sync at user-configured time (default: 2am)
+- **Syncs**: Cost data, audit logs, compliance reports to vector store
+- **Benefit**: Manager wakes up to fresh data without manual refresh
+- **Cost Optimization**: Single daily API call instead of repeated queries
 
 **Server-Side RAG (Escher AI Server):**
 - **Global Knowledge Base**: All cloud provider APIs, CLI commands, playbooks, best practices
@@ -313,9 +336,30 @@ Physical Laptop:
 - **Updates**: Escher continuously updates with new cloud features, best practices, security advisories
 
 **Combined Power:**
-- Client RAG provides user-specific context
+- Client RAG provides user-specific context (estate + immutable reports)
 - Server RAG provides cloud operations expertise
 - Together they enable intelligent, context-aware, multi-cloud operations
+
+---
+
+### **Version 2 Release: Central Immutable Reports**
+
+**Beta/V1 Release (Current):**
+- Immutable reports stored in user's control:
+  - **Local Only**: Local vector store on physical laptop
+  - **Extend My Laptop**: Vector store in S3/Blob/GCS (user's cloud)
+- Privacy-first: No reports leave user's environment
+
+**V2 Release (Future):**
+- **Optional**: User can choose to sync immutable reports to Escher-managed central location
+- **Benefits**:
+  - Cross-device access to reports (access from any device)
+  - Team collaboration on reports
+  - Longer retention without user cloud costs
+  - Advanced analytics across historical reports
+- **User Choice**: Opt-in only, users control what reports are synced
+- **Privacy**: Reports are encrypted, user controls access
+- **Migration**: Users can migrate from V1 (local) to V2 (central) anytime
 
 ### **Privacy & Security Model**
 
@@ -495,51 +539,62 @@ Every request is independent. The AI Server has no memory between requests.
 ### ✅ **Resolved - Deployment & Execution**
 
 #### 1. Deployment Model
-- ✅ **DECIDED**: Two models - Local Only (Beta) and Extended Laptop (Main Release)
+- ✅ **DECIDED**: Two models - Local Only (Beta) and Extend My Laptop (Main Release)
 - ✅ User chooses deployment based on their needs
 
 #### 2. Immediate Operations (User-Initiated)
-- ✅ **DECIDED**: Executed by Physical Laptop (Local Only) or Extended Laptop (Extended mode)
+- ✅ **DECIDED**: Executed by Physical Laptop (Local Only) or Extend My Laptop (Extended mode)
 - ✅ Uses user's stored credentials
 
 #### 3. Scheduled Operations (Automated)
 - ✅ **DECIDED**:
   - **Local Only**: Physical laptop must be online (local cron/scheduler)
-  - **Extended Laptop**: Cloud scheduler (EventBridge/Logic Apps/Cloud Scheduler) triggers Extended Laptop
+  - **Extend My Laptop**: Cloud scheduler (EventBridge/Logic Apps/Cloud Scheduler) triggers Extend My Laptop
   - User chooses model based on requirements
 
 #### 4. State & Credentials Storage
 - ✅ **DECIDED**:
   - **Local Only**: Stored on physical laptop
-  - **Extended Laptop**: Stored in user's cloud (S3/Blob/GCS for state, SSM/Key Vault/Secret Manager for credentials)
+  - **Extend My Laptop**: Stored in user's cloud (S3/Blob/GCS for state, SSM/Key Vault/Secret Manager for credentials)
   - **Escher AI Server**: 100% stateless, stores nothing
 
 #### 5. Continuous Monitoring & Automated Remediation
 - ✅ **DECIDED**:
   - **Local Only**: Limited to when laptop online
-  - **Extended Laptop**: Event-driven via cloud schedulers (EventBridge Events, Azure Event Grid, Cloud Pub/Sub)
+  - **Extend My Laptop**: Event-driven via cloud schedulers (EventBridge Events, Azure Event Grid, Cloud Pub/Sub)
 
 ---
 
-### 🟡 **Important - Reports & Analytics**
+### ✅ **Resolved - Reports & Analytics**
 
 #### 1. Historical Data for Reports
-- ❓ **OPEN**: Where stored and for how long?
-  - **Local Only**: Local database on laptop (limited retention)?
-  - **Extended Laptop**: S3/Blob/GCS (longer retention, configurable by user)?
-  - Retention policy (30 days, 90 days, 1 year)?
+- ✅ **DECIDED**: Stored in vector store as immutable reports collection
+  - **Local Only**: Local vector store on laptop
+  - **Extend My Laptop**: Vector store in S3/Blob/GCS (user's cloud)
+  - **V2 Release**: Optional central immutable reports (opt-in)
+  - Retention policy: User-configurable (default recommendations: 90 days for cost, 1 year for audit logs)
 
 #### 2. Cost Data Collection
-- ❓ **OPEN**: How accessed?
-  - Direct API calls to AWS Cost Explorer, Azure Cost Management, GCP Billing APIs?
-  - Real-time or periodic snapshots?
-  - Stored for historical analysis?
+- ✅ **DECIDED**: Daily snapshots to avoid repeated API calls
+  - Direct API calls to AWS Cost Explorer, Azure Cost Management, GCP Billing APIs
+  - **Daily sync** scheduled (default 2am, user-configurable)
+  - Stored in immutable reports vector store for historical analysis
+  - **Cost optimization**: Single daily API call instead of repeated queries
+  - Manager persona gets fresh data automatically every morning
 
-#### 3. Report Generation
-- ❓ **OPEN**:
-  - On-demand or scheduled?
-  - Export formats: PDF, CSV, Excel, JSON?
-  - Email delivery option?
+#### 3. Audit Logs
+- ✅ **DECIDED**: Immutable audit logs in vector store
+  - Cannot be modified after creation (compliance requirement)
+  - Daily sync ensures complete audit trail
+  - Fast retrieval via vector store for AI analysis
+  - Manager persona has complete audit trail updated daily
+
+#### 4. Report Generation
+- ✅ **DECIDED**: Both on-demand and scheduled
+  - On-demand: User requests via conversational interface
+  - Scheduled: Daily sync for cost/audit logs
+  - Export formats: PDF, CSV, Excel, JSON (AI generates in requested format)
+  - ❓ **OPEN**: Email delivery option?
 
 ---
 
@@ -584,16 +639,17 @@ Every request is independent. The AI Server has no memory between requests.
 ## Next Steps - Architecture Discussion
 
 ### ✅ Phase 1: Define Execution Model (COMPLETE)
-1. ✅ Decided on two deployment models (Local Only vs Extended Laptop)
+1. ✅ Decided on two deployment models (Local Only vs Extend My Laptop)
 2. ✅ Defined scheduled operations execution (local scheduler vs cloud scheduler)
 3. ✅ Clarified privacy model (Escher AI Server 100% stateless, state in user's control)
-4. ✅ Defined Extended Laptop provisioning (Escher provisions in user's account with user's credentials)
+4. ✅ Defined Extend My Laptop provisioning (Escher provisions in user's account with user's credentials)
 
-### 🔄 Phase 2: Define Data Architecture (IN PROGRESS)
-1. ❓ Historical data retention strategy
-2. ❓ Reports generation and storage model
-3. ❓ Cost data collection and aggregation approach
-4. ❓ Export formats and delivery mechanisms
+### ✅ Phase 2: Define Data Architecture (COMPLETE)
+1. ✅ Historical data retention strategy (vector store with immutable reports collection)
+2. ✅ Reports generation and storage model (on-demand + scheduled, stored in vector store)
+3. ✅ Cost data collection and aggregation approach (daily snapshots to vector store)
+4. ✅ Export formats (PDF, CSV, Excel, JSON via AI generation)
+5. ✅ Daily sync for Manager persona (cost + audit logs at 2am)
 
 ### ⏳ Phase 3: Define Personas & RBAC (PENDING)
 1. Complete persona definitions (Manager, Executor, others?)
@@ -615,17 +671,20 @@ Every request is independent. The AI Server has no memory between requests.
 
 ### ✅ **Fully Aligned & Documented**
 - Multi-cloud platform (AWS, Azure, GCP) with conversational interface
-- Two deployment models (Local Only and Extended Laptop) based on user needs
+- Two deployment models (Local Only and Extend My Laptop) based on user needs
 - State and execution in user's control (local or user's cloud)
 - Escher AI Server 100% stateless (no user data, credentials, or state)
-- Extended Laptop provisioned in user's account with user's credentials
+- Extend My Laptop provisioned in user's account with user's credentials
 - Scheduled operations via cloud schedulers (EventBridge/Logic Apps/Cloud Scheduler)
-- Multi-cloud management from single Extended Laptop
+- Multi-cloud management from single Extend My Laptop
 - Rust execution engine for operations (playbooks, CLI commands, shell scripts)
+- **Immutable reports in vector store** (cost, audit logs, compliance)
+- **Daily sync for Manager persona** (cost + audit logs at 2am)
+- **Client-side RAG** with 4 collections (estate, chat, operations, immutable reports)
+- **Server-side RAG** with playbook library and cloud operations knowledge
+- **V2 release plan** for optional central immutable reports
 
 ### 🟡 **Partially Defined - Need Details**
-- Reports & analytics architecture (generation, storage, retention)
-- Cost data collection and historical analysis
 - Multi-account/subscription/project credential management
 - Collaboration and approval workflows
 - "Extend me" pattern implementation
@@ -634,8 +693,7 @@ Every request is independent. The AI Server has no memory between requests.
 - Complete list of supported cloud operations by category
 - Personas & RBAC model details
 - Budget management features
-- Notification and alerting mechanisms
-- Audit trail and compliance logging
+- Notification and alerting mechanisms (email delivery, Slack, PagerDuty)
 
 ---
 
