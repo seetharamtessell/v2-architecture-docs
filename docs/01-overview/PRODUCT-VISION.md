@@ -433,10 +433,10 @@ Every request is independent. The AI Server has no memory between requests.
 - Savings plan recommendations
 - Waste detection (idle resources, unattached volumes)
 
-**Key Questions**:
-- [ ] Historical cost data: Stored on server or only client?
-- [ ] Cost API calls: From client or server?
-- [ ] Budget alerts: Real-time or periodic?
+**Implementation**:
+- Historical cost data stored in immutable reports collection (vector store)
+- Daily snapshots from AWS Cost Explorer, Azure Cost Management, GCP Billing APIs
+- Budget alerts: Periodic (evaluated during daily sync, default 2am)
 
 ---
 
@@ -448,11 +448,11 @@ Every request is independent. The AI Server has no memory between requests.
 - **Change History**: Audit trail of operations
 - **Compliance Reports**: CIS benchmarks, custom policies
 
-**Key Questions**:
-- [ ] Generated on-demand or scheduled?
-- [ ] Stored where: Client or server?
-- [ ] Export formats: PDF, CSV, Excel?
-- [ ] Historical data retention policy?
+**Implementation**:
+- **Generation**: Both on-demand (user requests) and scheduled (daily sync at 2am)
+- **Storage**: Immutable reports collection in vector store (local or S3/Blob/GCS)
+- **Export Formats**: PDF, CSV, Excel, JSON (AI generates in requested format)
+- **Retention Policy**: User-configurable (default: 90 days for cost, 1 year for audit logs)
 
 ---
 
@@ -463,11 +463,11 @@ Every request is independent. The AI Server has no memory between requests.
 - **Compliance Enforcement**: Auto-tag resources, enforce encryption
 - **Cost Optimization**: Automated cleanup of waste
 
-**Key Questions**:
-- [ ] Who executes scheduled operations: Client or server?
-- [ ] What if client is offline during scheduled time?
-- [ ] Does server need AssumeRole access for scheduled operations?
-- [ ] Event-driven automation: How triggered?
+**Implementation**:
+- **Local Only**: Physical laptop must be online for scheduled operations (local cron/scheduler)
+- **Extend My Laptop**: Cloud schedulers (EventBridge/Logic Apps/Cloud Scheduler) trigger Extend My Laptop
+- **Event-Driven**: EventBridge Events, Azure Event Grid, Cloud Pub/Sub trigger automated remediation
+- **No AssumeRole needed**: Extend My Laptop uses credentials installed in SSM/Key Vault/Secret Manager
 
 ---
 
@@ -613,10 +613,12 @@ Every request is independent. The AI Server has no memory between requests.
   - Real-time notifications needed?
 
 #### 3. Audit Trail
-- ❓ **OPEN**:
-  - All operations logged where?
-  - Immutable audit log requirements?
-  - Compliance retention policies?
+- ✅ **DECIDED**: Immutable audit logs in vector store
+  - **All operations logged**: In immutable reports collection (vector store)
+  - **Storage**: Local (Local Only) or S3/Blob/GCS (Extend My Laptop)
+  - **Immutable**: Cannot be modified after creation (compliance requirement)
+  - **Daily sync**: Ensures complete audit trail updated daily at 2am
+  - **Retention**: User-configurable (default: 1 year for audit logs)
 
 ---
 
