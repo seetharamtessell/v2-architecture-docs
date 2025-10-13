@@ -45,17 +45,19 @@ Escher offers **two deployment models** to meet different user needs:
 - **Physical Laptop** runs Tauri application (Rust backend + React frontend)
 - **Local Execution**: All operations execute from laptop using Rust execution engine
 - **Local State**: Chat history, estate inventory, credentials stored on laptop
+- **Periodic Backup**: Local database snapshot synced to S3/Blob/GCS periodically (configurable interval, default: hourly)
 - **Requirements**: Laptop must stay online for scheduled operations
 
 **Pros**:
-- Zero cloud infrastructure costs
+- Zero cloud compute infrastructure costs (only storage for backups)
 - Complete local control
 - Simple setup
+- Automatic backup to cloud for disaster recovery
 
 **Cons**:
 - Laptop must remain online for scheduled jobs
 - Limited to laptop's compute resources
-- No cross-device access to state
+- No cross-device access to state (backups for recovery only, not real-time sync)
 
 ---
 
@@ -356,7 +358,9 @@ Physical Laptop:
   3. **Executed Operations**: History of operations executed
   4. **Immutable Reports**: Cost reports, audit logs, compliance reports (to avoid repeated API calls)
 - **Purpose**: Provides context to AI Server queries, enables offline operation documentation
-- **Storage**: Local vector store (Local Only) or S3/Blob/GCS vector store (Extend My Laptop)
+- **Storage**:
+  - **Local Only**: Local vector store on laptop + periodic backup snapshots to S3/Blob/GCS (hourly, configurable)
+  - **Extend My Laptop**: S3/Blob/GCS vector store (single source of truth)
 
 **Immutable Reports Collection:**
 - **Cost Reports**: Daily snapshots of AWS Cost Explorer, Azure Cost Management, GCP Billing data
@@ -601,7 +605,7 @@ Every request is independent. The AI Server has no memory between requests.
 
 #### 4. State & Credentials Storage
 - ✅ **DECIDED**:
-  - **Local Only**: Stored on physical laptop
+  - **Local Only**: Stored on physical laptop + periodic backups to S3/Blob/GCS (hourly, configurable)
   - **Extend My Laptop**: Stored in user's cloud (S3/Blob/GCS for state, SSM/Key Vault/Secret Manager for credentials)
   - **Escher AI Server**: 100% stateless, stores nothing
 
