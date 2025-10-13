@@ -256,8 +256,11 @@ Decision Point - Is auto-remediation pre-approved?
 Notification via cloud-native services:
 ├─ 🔴 CRITICAL: AWS SNS/Azure Notification Hubs/GCP Cloud Messaging
 │   └─ Channels: Email + SMS + Slack/PagerDuty
+│   └─ Message: "🚨 CRITICAL: S3 bucket 'my-data' made public. AUTO-RESOLVED: Made private. Review details in Escher."
 ├─ 🟠 HIGH: Email + Slack only
+│   └─ Message: "⚠️ HIGH: 3 EC2 instances idle for 7 days. Approval needed to stop. Open Escher to review."
 └─ 🟡 MEDIUM: In-app notification banner
+    └─ Message: "ℹ️ MEDIUM: RDS snapshot storage increased 25GB. View recommendations."
 ↓
 Store complete alert record in RAG (Alerts & Events collection):
 ├─ Event details, AI analysis, action taken, notification sent
@@ -265,6 +268,126 @@ Store complete alert record in RAG (Alerts & Events collection):
 └─ Used for queries, comparisons, and compliance reporting
 ↓
 Extend My Laptop shuts down (event-based lifecycle)
+↓
+**User Experience - When User Opens Physical Laptop:**
+
+When Physical Laptop Connects:
+├─ Syncs latest state from S3/Blob/GCS
+├─ Discovers new alerts in RAG (Alerts & Events collection)
+└─ Displays alert banner based on severity
+
+🔴 CRITICAL Alert Banner (Red background, top of screen):
+┌────────────────────────────────────────────────────────────┐
+│ 🚨 CRITICAL ALERT - AUTO-RESOLVED 2 minutes ago            │
+│                                                            │
+│ S3 bucket 'my-data' made public at 2:34 AM               │
+│ ✅ Escher automatically made bucket private              │
+│                                                            │
+│ Details:                                                   │
+│ • 1.2M customer records were exposed for 2 minutes       │
+│ • Bucket made public by user john@company.com            │
+│ • Auto-remediation executed: aws s3api put-bucket-acl    │
+│ • Verification: Bucket now private ✅                    │
+│                                                            │
+│ 💡 Recommended Next Steps:                               │
+│ 1. Review bucket policy to prevent future occurrences    │
+│ 2. Notify security team about exposure                   │
+│ 3. Check CloudTrail for access during exposure window    │
+│ 4. Update IAM policy to restrict public bucket creation  │
+│                                                            │
+│ [View Full Timeline] [Create Prevention Playbook]         │
+│ [Notify Security Team] [Acknowledge]                      │
+└────────────────────────────────────────────────────────────┘
+
+🟠 HIGH Alert Banner (Orange background):
+┌────────────────────────────────────────────────────────────┐
+│ ⚠️ HIGH ALERT - Requires Your Approval                    │
+│                                                            │
+│ 5 EC2 instances idle for 7 days (CPU < 5%)               │
+│ Potential savings: $203/month                             │
+│                                                            │
+│ Instances:                                                 │
+│ • i-abc123 (dev) - t3.large - $52/month                  │
+│ • i-def456 (dev) - t3.large - $52/month                  │
+│ • i-ghi789 (dev) - t3.medium - $35/month                 │
+│ • i-jkl012 (staging) - t3.large - $52/month              │
+│ • i-mno345 (staging) - t3.medium - $12/month             │
+│                                                            │
+│ 💬 Ask: "Is it safe to stop these instances?"           │
+│ 💬 Ask: "What are they used for?"                       │
+│                                                            │
+│ [Stop All] [Stop Dev Only] [Remind Me Tomorrow]          │
+│ [View Details] [Dismiss]                                  │
+└────────────────────────────────────────────────────────────┘
+
+**Conversational Follow-Up:**
+
+User can ask questions about the alert:
+
+User: "Show me the full timeline of the S3 bucket exposure"
+
+AI Response:
+"Here's the complete timeline of the S3 bucket 'my-data' security incident:
+
+2:32:15 AM - Bucket policy changed by john@company.com
+2:32:15 AM - CloudWatch detected public access enabled
+2:32:20 AM - EventBridge published event to Extend My Laptop
+2:32:22 AM - Extend My Laptop started (Fargate)
+2:32:25 AM - RAG loaded: Bucket contains PII (customer data)
+2:32:26 AM - Event sent to AI Server for analysis
+2:32:28 AM - AI Server: Severity = CRITICAL (PII exposed)
+2:32:29 AM - Auto-remediation check: APPROVED (pre-configured)
+2:32:30 AM - Executed: aws s3api put-bucket-acl --bucket my-data --acl private
+2:32:32 AM - Verification: Bucket now private ✅
+2:32:33 AM - Notifications sent: Email + SMS + Slack
+2:32:34 AM - Alert stored in RAG (immutable)
+2:34:45 AM - Extend My Laptop shutdown
+
+**Total exposure time: 2 minutes 17 seconds**
+
+CloudTrail Analysis:
+• No external access detected during exposure window
+• Only john@company.com accessed bucket (authorized user)
+• Risk: LOW (exposure was brief, no unauthorized access)
+
+Would you like me to:
+1. Create a prevention playbook to restrict public bucket creation?
+2. Send security incident report to security@company.com?
+3. Review IAM policies for john@company.com?"
+
+**Alert Persistence:**
+
+All alerts remain in UI until explicitly acknowledged:
+- 🔴 CRITICAL: Red banner persists until acknowledged
+- 🟠 HIGH: Orange banner persists until action taken or dismissed
+- 🟡 MEDIUM: Auto-dismisses after 24 hours or when acknowledged
+- ℹ️ INFO: Aggregated in morning report (no banner)
+
+**Alert History:**
+
+User can view all alerts:
+```
+User: "Show me all alerts from last 7 days"
+
+AI Response:
+"Here are all alerts from the last 7 days:
+
+🔴 CRITICAL (2 alerts):
+1. Yesterday 2:34 AM - S3 bucket made public → AUTO-RESOLVED
+2. 3 days ago 11:47 PM - Production RDS exceeded 90% capacity → AUTO-RESOLVED (auto-scaled)
+
+🟠 HIGH (5 alerts):
+1. Yesterday 10:15 AM - Cost spike +$186 (+17%) → ACKNOWLEDGED
+2. 2 days ago 3:22 PM - Security group opened port 22 to 0.0.0.0/0 → AUTO-RESOLVED
+3. 4 days ago 9:05 AM - 5 idle instances detected → PENDING APPROVAL
+4. 5 days ago 4:30 PM - RDS backup failed → ACKNOWLEDGED (resolved)
+5. 6 days ago 1:15 PM - IAM password policy violation → ACKNOWLEDGED (fixed)
+
+🟡 MEDIUM (12 alerts):
+[Click to expand]
+
+💬 Ask me for details on any alert"
+```
 ```
 
 **Unified Event Schema** (Cross-Cloud Normalization):
