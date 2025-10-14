@@ -488,6 +488,427 @@ function generateMockResources(count: number): Resource[] {
 }
 ```
 
+### Alert & Event Commands
+
+```typescript
+// Alert types
+export interface Alert {
+  id: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  title: string;
+  description: string;
+  source: 'real_time' | 'scheduled_scan';
+  affectedResources: Array<{
+    id: string;
+    type: string;
+    name: string;
+  }>;
+  detectedAt: number;
+  acknowledgedAt?: number;
+  acknowledgedBy?: string;
+  resolvedAt?: number;
+  suggestedActions?: Array<{
+    id: string;
+    title: string;
+    type: 'auto_remediation' | 'manual_action' | 'escalation';
+    description: string;
+    estimatedImpact?: string;
+  }>;
+  metadata?: Record<string, any>;
+}
+
+export interface MorningReport {
+  id: string;
+  generatedAt: number;
+  summary: {
+    totalAlerts: number;
+    criticalCount: number;
+    newResources: number;
+    costChange: {
+      amount: number;
+      percentage: number;
+    };
+  };
+  sections: Array<{
+    id: string;
+    title: string;
+    priority: 'high' | 'medium' | 'low';
+    content: string;
+    alerts?: Alert[];
+    hasQuickFix: boolean;
+    quickFixAction?: string;
+  }>;
+  conversationHistory: Array<{
+    question: string;
+    answer: string;
+    timestamp: number;
+  }>;
+}
+
+export interface AlertTimelineEvent {
+  id: string;
+  timestamp: number;
+  type: 'detection' | 'escalation' | 'action_taken' | 'resolution';
+  actor: 'system' | 'user' | 'auto_remediation';
+  description: string;
+  metadata?: Record<string, any>;
+}
+
+export interface GetAlertsParams {
+  severity?: Alert['severity'][];
+  acknowledged?: boolean;
+  startDate?: number;
+  endDate?: number;
+  limit?: number;
+}
+
+export interface AcknowledgeAlertParams {
+  alertId: string;
+  acknowledgedBy: string;
+}
+
+export interface AskMorningReportQuestionParams {
+  reportId: string;
+  question: string;
+}
+```
+
+### Deployment Configuration Commands
+
+```typescript
+export interface DeploymentSettings {
+  model: 'local_only' | 'extend_my_laptop';
+  extendMyLaptop?: {
+    enabled: boolean;
+    cloudProvider: 'aws';
+    region: string;
+    instanceType: string;
+    lastSyncAt?: number;
+    syncStatus: 'idle' | 'syncing' | 'error';
+    estimatedMonthlyCost: number;
+  };
+}
+
+export interface AutoRemediationSettings {
+  enabled: boolean;
+  rules: Array<{
+    id: string;
+    name: string;
+    condition: string;
+    action: string;
+    requiresApproval: boolean;
+    maxImpact: 'low' | 'medium' | 'high';
+  }>;
+}
+
+export interface GetDeploymentSettingsParams {}
+
+export interface UpdateDeploymentModelParams {
+  model: 'local_only' | 'extend_my_laptop';
+  extendMyLaptopConfig?: DeploymentSettings['extendMyLaptop'];
+}
+```
+
+### Cost Management Commands
+
+```typescript
+export interface CostSummary {
+  currentMonth: {
+    total: number;
+    byService: Record<string, number>;
+    byAccount: Record<string, number>;
+    trend: 'increasing' | 'decreasing' | 'stable';
+    percentChange: number;
+  };
+  forecast: {
+    nextMonth: number;
+    confidence: number;
+  };
+  anomalies: Array<{
+    date: number;
+    service: string;
+    expectedCost: number;
+    actualCost: number;
+    deviation: number;
+  }>;
+}
+
+export interface Optimization {
+  id: string;
+  type: 'idle_resource' | 'rightsizing' | 'reserved_instance' | 'storage_optimization';
+  title: string;
+  description: string;
+  affectedResources: Array<{
+    id: string;
+    type: string;
+    name: string;
+  }>;
+  estimatedMonthlySavings: number;
+  effort: 'low' | 'medium' | 'high';
+  risk: 'low' | 'medium' | 'high';
+  quickFixAvailable: boolean;
+  quickFixAction?: {
+    title: string;
+    command: string;
+    requiresApproval: boolean;
+  };
+}
+
+export interface GetCostSummaryParams {
+  startDate?: number;
+  endDate?: number;
+}
+
+export interface GetOptimizationsParams {
+  type?: Optimization['type'][];
+  minSavings?: number;
+}
+
+export interface ApplyOptimizationParams {
+  optimizationId: string;
+  approved: boolean;
+}
+```
+
+### Mock Alert & Cost Methods
+
+```typescript
+// Add to MockTauriService class
+
+// ========== ALERT COMMANDS ==========
+
+async getAlerts(params: Types.GetAlertsParams): Promise<Alert[]> {
+  await this.delay(200);
+  return [
+    {
+      id: 'alert-1',
+      severity: 'CRITICAL',
+      title: 'RDS instance running without backups',
+      description: 'Production RDS instance db-prod-01 has backup retention set to 0 days',
+      source: 'scheduled_scan',
+      affectedResources: [
+        { id: 'rds-1', type: 'RDS', name: 'db-prod-01' }
+      ],
+      detectedAt: Date.now() - 3600000,
+      suggestedActions: [
+        {
+          id: 'action-1',
+          title: 'Enable automated backups',
+          type: 'auto_remediation',
+          description: 'Set backup retention to 7 days',
+          estimatedImpact: 'Low - minimal cost increase'
+        }
+      ]
+    },
+    {
+      id: 'alert-2',
+      severity: 'HIGH',
+      title: 'EC2 instance with open security group',
+      description: 'Security group sg-123 allows 0.0.0.0/0 on port 22',
+      source: 'real_time',
+      affectedResources: [
+        { id: 'ec2-1', type: 'EC2', name: 'web-server-01' }
+      ],
+      detectedAt: Date.now() - 1800000
+    }
+  ];
+}
+
+async getMorningReport(): Promise<MorningReport> {
+  await this.delay(300);
+  return {
+    id: 'report-' + Date.now(),
+    generatedAt: Date.now(),
+    summary: {
+      totalAlerts: 12,
+      criticalCount: 2,
+      newResources: 8,
+      costChange: {
+        amount: 150.25,
+        percentage: 5.2
+      }
+    },
+    sections: [
+      {
+        id: 'section-1',
+        title: 'Critical Security Alerts',
+        priority: 'high',
+        content: '2 critical alerts require immediate attention',
+        hasQuickFix: true,
+        quickFixAction: 'Enable backups on 1 RDS instance'
+      },
+      {
+        id: 'section-2',
+        title: 'Cost Optimization Opportunities',
+        priority: 'medium',
+        content: 'Identified $450/month in potential savings',
+        hasQuickFix: false
+      }
+    ],
+    conversationHistory: []
+  };
+}
+
+async acknowledgeAlert(params: Types.AcknowledgeAlertParams): Promise<void> {
+  await this.delay(100);
+  console.log('[Mock] Acknowledged alert:', params.alertId);
+}
+
+async askMorningReportQuestion(
+  params: Types.AskMorningReportQuestionParams
+): Promise<string> {
+  await this.delay(500);
+  return 'Based on the morning report, here is the answer to your question...';
+}
+
+async getAlertTimeline(alertId: string): Promise<AlertTimelineEvent[]> {
+  await this.delay(200);
+  return [
+    {
+      id: 'event-1',
+      timestamp: Date.now() - 3600000,
+      type: 'detection',
+      actor: 'system',
+      description: 'Alert detected by scheduled scan'
+    },
+    {
+      id: 'event-2',
+      timestamp: Date.now() - 1800000,
+      type: 'escalation',
+      actor: 'system',
+      description: 'Alert escalated to CRITICAL due to no action taken'
+    }
+  ];
+}
+
+// ========== DEPLOYMENT COMMANDS ==========
+
+async getDeploymentSettings(): Promise<DeploymentSettings> {
+  await this.delay(100);
+  return {
+    model: 'local_only',
+    extendMyLaptop: {
+      enabled: false,
+      cloudProvider: 'aws',
+      region: 'us-east-1',
+      instanceType: 't3.medium',
+      syncStatus: 'idle',
+      estimatedMonthlyCost: 30.50
+    }
+  };
+}
+
+async updateDeploymentModel(
+  params: Types.UpdateDeploymentModelParams
+): Promise<void> {
+  await this.delay(200);
+  console.log('[Mock] Updated deployment model:', params.model);
+}
+
+async getAutoRemediationSettings(): Promise<AutoRemediationSettings> {
+  await this.delay(100);
+  return {
+    enabled: true,
+    rules: [
+      {
+        id: 'rule-1',
+        name: 'Enable RDS backups',
+        condition: 'backup_retention = 0',
+        action: 'Set backup retention to 7 days',
+        requiresApproval: false,
+        maxImpact: 'low'
+      }
+    ]
+  };
+}
+
+// ========== COST COMMANDS ==========
+
+async getCostSummary(params: Types.GetCostSummaryParams): Promise<CostSummary> {
+  await this.delay(300);
+  return {
+    currentMonth: {
+      total: 3250.75,
+      byService: {
+        'EC2': 1200.50,
+        'RDS': 850.25,
+        'S3': 450.00,
+        'Lambda': 300.00,
+        'Other': 450.00
+      },
+      byAccount: {
+        'prod-account': 2100.50,
+        'dev-account': 1150.25
+      },
+      trend: 'increasing',
+      percentChange: 5.2
+    },
+    forecast: {
+      nextMonth: 3450.00,
+      confidence: 0.85
+    },
+    anomalies: [
+      {
+        date: Date.now() - 86400000 * 3,
+        service: 'EC2',
+        expectedCost: 40.00,
+        actualCost: 85.00,
+        deviation: 112.5
+      }
+    ]
+  };
+}
+
+async getOptimizations(
+  params: Types.GetOptimizationsParams
+): Promise<Optimization[]> {
+  await this.delay(200);
+  return [
+    {
+      id: 'opt-1',
+      type: 'idle_resource',
+      title: 'Stop idle EC2 instance',
+      description: 'Instance i-abc123 has been idle for 7 days',
+      affectedResources: [
+        { id: 'i-abc123', type: 'EC2', name: 'test-server' }
+      ],
+      estimatedMonthlySavings: 150.00,
+      effort: 'low',
+      risk: 'low',
+      quickFixAvailable: true,
+      quickFixAction: {
+        title: 'Stop instance',
+        command: 'aws ec2 stop-instances --instance-ids i-abc123',
+        requiresApproval: false
+      }
+    },
+    {
+      id: 'opt-2',
+      type: 'rightsizing',
+      title: 'Downsize over-provisioned RDS',
+      description: 'RDS instance db-prod-01 uses only 20% CPU on average',
+      affectedResources: [
+        { id: 'rds-1', type: 'RDS', name: 'db-prod-01' }
+      ],
+      estimatedMonthlySavings: 300.00,
+      effort: 'medium',
+      risk: 'medium',
+      quickFixAvailable: false
+    }
+  ];
+}
+
+async applyOptimization(params: Types.ApplyOptimizationParams): Promise<void> {
+  await this.delay(500);
+  console.log('[Mock] Applied optimization:', params.optimizationId);
+}
+
+  // Existing delay method
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+```
+
 ---
 
 ## WebSocket Server Contracts
