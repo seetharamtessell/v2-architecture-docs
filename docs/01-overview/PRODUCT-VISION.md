@@ -1297,11 +1297,11 @@ See [Alert & Event Handling Architecture](#alert--event-handling-architecture) s
 
 ## Architecture Questions to Resolve
 
-### ✅ **Resolved - Deployment & Execution**
+### ✅ **Resolved - Where Escher Runs & Execution**
 
-#### 1. Deployment Model
-- ✅ **DECIDED**: Two models - Local Only (Beta) and Extend My Laptop (Main Release)
-- ✅ User chooses deployment based on their needs
+#### 1. Where Escher Runs
+- ✅ **DECIDED**: Two options - Run on Your Laptop (Beta) and Extend to Your Cloud (Main Release)
+- ✅ User chooses based on their needs
 
 #### 2. Immediate Operations (User-Initiated)
 - ✅ **DECIDED**: Executed by Physical Laptop (Local Only) or Extend My Laptop (Extended mode)
@@ -1404,10 +1404,10 @@ See [Alert & Event Handling Architecture](#alert--event-handling-architecture) s
 ## Next Steps - Architecture Discussion
 
 ### ✅ Phase 1: Define Execution Model (COMPLETE)
-1. ✅ Decided on two deployment models
+1. ✅ Decided on two options (Run on Laptop / Extend to Cloud)
 2. ✅ Defined scheduled operations execution
 3. ✅ Clarified privacy model (AI Server 100% stateless)
-4. ✅ Defined Extend My Laptop provisioning
+4. ✅ Defined cloud extension provisioning
 
 ### ✅ Phase 2: Define Data Architecture (COMPLETE)
 1. ✅ Historical data retention strategy
@@ -1443,7 +1443,7 @@ See [Alert & Event Handling Architecture](#alert--event-handling-architecture) s
 │                   WHAT'S DECIDED ✅                          │
 ├─────────────────────────────────────────────────────────────┤
 │  • Multi-cloud platform (AWS, Azure, GCP)                   │
-│  • Two deployment models (Local Only, Extend My Laptop)     │
+│  • Two ways to run (Laptop-only or Extend to Cloud)        │
 │  • State and execution in user's control                    │
 │  • Escher AI Server 100% stateless                          │
 │  • Extend My Laptop provisioned in user's account           │
