@@ -41,9 +41,9 @@
 
 ## 🔐 **Critical Architecture Principle**
 
-> **⚠️ ESCHER AI SERVER IS 100% STATELESS - REGARDLESS OF DEPLOYMENT MODEL**
+> **⚠️ ESCHER AI SERVER IS 100% STATELESS - REGARDLESS OF WHERE ESCHER RUNS**
 
-Whether user chooses **Local Only** or **Extend My Laptop** deployment:
+Whether you **Run on Your Laptop** or **Extend to Your Cloud**:
 
 | What Escher AI Server Does | What It Does NOT Do |
 |---|---|
