@@ -6,15 +6,55 @@
 
 ---
 
-## **🔐 Critical Architecture Principle**
+## 📋 **TABLE OF CONTENTS**
 
-**⚠️ ESCHER AI SERVER IS 100% STATELESS - REGARDLESS OF DEPLOYMENT MODEL**
+### 🎯 **QUICK START** (Read These First)
+1. [Critical Architecture Principle](#-critical-architecture-principle) - Our #1 non-negotiable
+2. [Product Overview](#product-overview) - What is Escher?
+3. [Deployment Models](#deployment-architecture) - Local Only vs Extend My Laptop
+
+### 🏗️ **CORE ARCHITECTURE**
+4. [Deployment Architecture](#deployment-architecture) - How Escher runs
+   - [Model 1: Local Only](#model-1-local-only-beta--lightweight-users)
+   - [Model 2: Extend My Laptop](#model-2-extend-my-laptop-main-release--power-users)
+5. [Alert & Event System](#alert--event-handling-architecture) - Real-time + Scheduled
+   - [Real-Time Operational Alerts](#1-real-time-operational-alerts--cant-wait---immediate-action-required)
+   - [Scheduled Scan Alerts (Morning Report)](#2-scheduled-scan-alerts--can-wait---interactive-morning-report)
+6. [Escher AI Server](#escher-ai-server-architecture) - Stateless brain architecture
+7. [RAG Architecture](#rag-architecture) - Client-side + Server-side knowledge
+
+### 💼 **BUSINESS FEATURES**
+8. [User Personas](#user-personas) - Manager vs Executor
+9. [Cloud Operations](#cloud-management-operations) - What you can do
+   - Resource Operations | Cost Management | Reports & Analytics
+   - Automation & Scheduling | Security & Compliance
+   - Multi-Account Management | Collaboration & Workflows
+   - AI-Powered Operations | Alerts & Monitoring
+
+### 🔧 **IMPLEMENTATION DETAILS**
+10. [Architecture Questions](#architecture-questions-to-resolve) - Resolved vs Open
+11. ["Extend Me" Pattern](#extend-me-pattern) - Pre-approved operations
+12. [Next Steps](#next-steps---architecture-discussion) - What's remaining
+13. [Alignment Check](#alignment-check) - Status summary
+
+---
+
+## 🔐 **Critical Architecture Principle**
+
+> **⚠️ ESCHER AI SERVER IS 100% STATELESS - REGARDLESS OF DEPLOYMENT MODEL**
 
 Whether user chooses **Local Only** or **Extend My Laptop** deployment:
-- **Escher AI Server stores NOTHING**: No user data, no cloud estate, no credentials, no chat history, no state
-- **Escher AI Server is a pure processing engine**: Receives requests → Processes with RAG → Returns responses → Forgets everything
-- **All state resides with the user**: On physical laptop (Local Only) or in user's cloud (Extend My Laptop)
-- **Privacy guarantee**: User's cloud estate and credentials NEVER leave user's control
+
+| What Escher AI Server Does | What It Does NOT Do |
+|---|---|
+| ✅ Receives requests | ❌ Stores user data |
+| ✅ Processes with RAG | ❌ Stores cloud estate |
+| ✅ Returns responses | ❌ Stores credentials |
+| ✅ Forgets everything after | ❌ Stores chat history |
+
+**Privacy Guarantee**: User's cloud estate and credentials NEVER leave user's control.
+
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
@@ -23,13 +63,19 @@ Whether user chooses **Local Only** or **Extend My Laptop** deployment:
 **Escher** is a Multi-Cloud Operations AI Platform that enables users to manage cloud operations across **AWS, Azure, and GCP** through a unified conversational interface.
 
 ### Core Philosophy
-- **Multi-Cloud Support**: Single platform for AWS, Azure, GCP (and future cloud providers)
-- **Conversational Management**: Natural language interface for all cloud operations
-- **Unified Experience**: Consistent interface across all cloud providers
-- **User-Controlled State**: State and execution remain in user's control (local or user's cloud)
-- **Privacy First**: Escher AI Server is 100% stateless - stores nothing about users
-- **AI-Powered Intelligence**: Server provides cloud-agnostic operations knowledge, recommendations, and playbook generation
-- **Flexible Deployment**: User chooses local-only or extended to cloud model
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  🌐 Multi-Cloud Support    Single platform for AWS/Azure/GCP │
+│  💬 Conversational         Natural language for all ops      │
+│  🎯 Unified Experience     Consistent across clouds          │
+│  🔒 User-Controlled State  Your data stays with you          │
+│  🤖 AI-Powered             Smart recommendations & automation │
+│  ⚙️ Flexible Deployment    Local-only or cloud-extended      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
@@ -37,36 +83,54 @@ Whether user chooses **Local Only** or **Extend My Laptop** deployment:
 
 Escher offers **two deployment models** to meet different user needs:
 
+### **Quick Comparison**
+
+| Feature | Local Only (Beta) | Extend My Laptop (Main) |
+|---|---|---|
+| **Target Users** | Individuals, simple ops | Teams, 24/7 requirements |
+| **Laptop Requirement** | Must stay online | Can be offline |
+| **Real-Time Alerts** | ❌ Requires always-on laptop | ✅ Works 24/7 |
+| **Scheduled Jobs** | ❌ Laptop must be online | ✅ Runs in cloud reliably |
+| **Cloud Costs** | $0 compute (only storage) | EventBridge + Fargate + S3 |
+| **Setup Complexity** | Simple | Moderate |
+| **Best For** | Exploration, dev work | Production, automation |
+
+---
+
 ### **Model 1: Local Only** (Beta / Lightweight Users)
 
-**Target Users**: Individual contributors, small teams, users with simple operations
+#### Architecture Diagram
+```
+Physical Laptop (Tauri App)
+├─ React Frontend
+├─ Rust Backend
+├─ Local RAG (Vector Store)
+├─ Local Credentials
+└─ Periodic Backup → S3/Blob/GCS (hourly)
+```
 
-**Architecture**:
-- **Physical Laptop** runs Tauri application (Rust backend + React frontend)
-- **Local Execution**: All operations execute from laptop using Rust execution engine
-- **Local State**: Chat history, estate inventory, credentials stored on laptop
-- **Periodic Backup**: Local database snapshot synced to S3/Blob/GCS periodically (configurable interval, default: hourly)
-- **Requirements**: Laptop must stay online for scheduled operations
+#### **Key Points**
+- ✅ **Zero cloud compute costs** (only storage for backups)
+- ✅ **Complete local control** of all data
+- ✅ **Simple setup** - install and go
+- ❌ **Laptop must stay online** for scheduled jobs and alerts
+- ❌ **No cross-device access** to state
 
-**Pros**:
-- Zero cloud compute infrastructure costs (only storage for backups)
-- Complete local control
-- Simple setup
-- Automatic backup to cloud for disaster recovery
+#### **Data Flow (Local Only)**
+```
+User Query → Physical Laptop searches RAG → Sends query + context to AI Server
+→ AI Server processes → Returns response
+→ Physical Laptop executes locally → Stores results in local RAG
+→ Periodic backup to S3/Blob/GCS (hourly)
+```
 
-**Cons**:
-- Laptop must remain online for scheduled jobs
-- **Laptop must remain always-on for real-time alerts** (critical limitation for monitoring)
-- Limited to laptop's compute resources
-- No cross-device access to state (backups for recovery only, not real-time sync)
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
 ### **Model 2: Extend My Laptop** (Main Release / Power Users)
 
-**Target Users**: Teams with scheduled operations, long-running tasks, 24/7 requirements
-
-**Architecture**:
+#### Architecture Diagram
 ```
 Physical Laptop (Tauri App) ←→ Escher AI Server (Stateless Brain)
         ↓↑                              ↑
@@ -75,90 +139,68 @@ Extend My Laptop (User's Cloud)          |
 Cloud Schedulers + Execution + State ←--┘
 ```
 
-**Components in User's Cloud**:
+#### **Components in User's Cloud**
 
 | Cloud Provider | Scheduler | Execution | State Storage | Credentials |
 |---|---|---|---|---|
 | **AWS** | EventBridge | Fargate | S3 | SSM Parameter Store |
-| **Azure** | Logic Apps / Functions | Container Instances | Blob Storage | Key Vault |
+| **Azure** | Logic Apps | Container Instances | Blob Storage | Key Vault |
 | **GCP** | Cloud Scheduler | Cloud Run | Cloud Storage | Secret Manager |
 
-**Setup Process**:
+#### **Setup Process (5 Steps)**
 1. User chooses "Extend to Cloud" from physical laptop
-2. User selects cloud provider for Extend My Laptop (AWS, Azure, or GCP)
-3. Physical laptop uses **user's local credentials** to provision infrastructure in **user's account**:
-   - Deploys **Escher-provided container image** (Rust execution engine + cloud CLIs)
-   - Creates scheduler (EventBridge/Logic Apps/Cloud Scheduler)
-   - Creates state storage (S3/Blob/GCS buckets)
-   - Creates credential storage (SSM/Key Vault/Secret Manager)
-4. User **installs cloud credentials** in Extend My Laptop (just like local laptop - AWS CLI configure, Azure CLI login, gcloud auth)
-5. Physical laptop becomes thin client, Extend My Laptop is single source of truth
+2. Select cloud provider (AWS, Azure, or GCP)
+3. Physical laptop provisions infrastructure in **user's account**:
+   - Deploys Escher-provided container image
+   - Creates scheduler
+   - Creates state storage
+   - Creates credential storage
+4. User installs cloud credentials (same as local laptop)
+5. Physical laptop becomes thin client
 
-**Execution Model**:
-- **Physical Laptop**: Interactive operations, ad-hoc queries, real-time tasks
-- **Extend My Laptop**: Scheduled operations, long-running tasks, automation, reports
-- **Event-Based Lifecycle**: Extend My Laptop starts on-demand, stops when idle (cost optimization)
-  - Scheduler triggers wake up Extend My Laptop for scheduled jobs
-  - Long-running operations keep Extend My Laptop alive until completion
-  - Auto-stops after idle period
+#### **Execution Model**
 
-**Data Flows**:
+| Component | Handles |
+|---|---|
+| **Physical Laptop** | Interactive ops, ad-hoc queries, real-time tasks |
+| **Extend My Laptop** | Scheduled ops, long-running tasks, automation |
+| **Event-Based Lifecycle** | Starts on-demand, stops when idle (cost optimization) |
 
-1. **Interactive Query Flow** (Local Only):
-   ```
-   User Query → Physical Laptop searches RAG → Sends query + context to AI Server
-   → AI Server processes → Returns response (information/execution/report)
-   → Physical Laptop executes locally → Stores results in local RAG
-   → Periodic backup to S3/Blob/GCS (hourly)
-   ```
+#### **Data Flows (Extend My Laptop)**
 
-2. **Interactive Query Flow** (Extend My Laptop):
-   ```
-   User Query → Physical Laptop searches local RAG → Sends query + context to AI Server
-   → AI Server processes → Returns response
-   → Physical Laptop sends execution request to Extend My Laptop
-   → Extend My Laptop executes → Stores results in S3/Blob/GCS RAG
-   → Physical Laptop syncs latest state from S3/Blob/GCS
-   ```
+**Interactive Query:**
+```
+User Query → Physical Laptop searches local RAG → Sends to AI Server
+→ AI Server processes → Returns response
+→ Physical Laptop → Extend My Laptop executes
+→ Results stored in S3/Blob/GCS RAG
+→ Physical Laptop syncs latest state
+```
 
-3. **Scheduled Execution Flow** (Extend My Laptop only):
-   ```
-   Scheduler (EventBridge/Logic Apps/Cloud Scheduler) triggers at scheduled time
-   → Extend My Laptop starts (Fargate/Container Instance/Cloud Run)
-   → Loads RAG from S3/Blob/GCS (estate, chat history, previous executions)
-   → Sends query + context to AI Server
-   → AI Server returns execution plan
-   → Extend My Laptop executes operations → Cloud APIs
-   → Stores results in RAG → Uploads RAG to S3/Blob/GCS
-   → Extend My Laptop shuts down (event-based lifecycle)
-   ```
+**Scheduled Execution:**
+```
+Scheduler triggers → Extend My Laptop starts
+→ Loads RAG from S3/Blob/GCS
+→ Sends query + context to AI Server
+→ AI Server returns execution plan
+→ Extends My Laptop executes → Cloud APIs
+→ Stores results in RAG → Uploads to S3/Blob/GCS
+→ Extend My Laptop shuts down
+```
 
-4. **State Synchronization**:
-   - **Local Only**: Periodic backup from local RAG to S3/Blob/GCS (hourly, configurable)
-   - **Extend My Laptop**: Physical Laptop pulls latest state from S3/Blob/GCS on demand or periodically
-   - **Single Source of Truth**: Local RAG (Local Only) or S3/Blob/GCS RAG (Extend My Laptop)
-
-**Multi-Cloud Management**:
+#### **Multi-Cloud Management**
 - Extend My Laptop (e.g., on AWS) manages **all clouds** (AWS + Azure + GCP)
-- User installs credentials for all clouds in Extend My Laptop's credential store
-- Example: AWS Fargate Extend My Laptop with AWS credentials (SSM) + Azure Service Principal (SSM) + GCP Service Account (SSM)
+- User installs credentials for all clouds in credential store
+- Example: AWS Fargate with AWS + Azure + GCP credentials in SSM
 
-**Escher AI Server Role**:
-- **100% Stateless**: Stores nothing about users, no credentials, no state
-- **Provides**: LLM responses, operation suggestions, playbook generation, AI intelligence
-- **Communication**: Physical Laptop ↔ AI Server (for conversational AI), Extend My Laptop ↔ AI Server (for scheduled job intelligence)
+#### **Key Benefits**
+- ✅ **24/7 operations** without laptop online
+- ✅ **Scheduled jobs** run reliably
+- ✅ **Long-running operations** don't block laptop
+- ✅ **Cross-device access** to state
+- ✅ **Event-based compute** = lower costs than always-on
 
-**Pros**:
-- 24/7 operations without laptop online
-- Scheduled jobs run reliably
-- Long-running operations don't block laptop
-- Cross-device access to state
-- Event-based compute = lower costs than always-on
-
-**Cons**:
-- Cloud infrastructure costs (EventBridge, Fargate/Container Instances, S3/Blob/GCS)
-- More complex setup
-- Cold start delays for event-based execution
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
@@ -169,114 +211,114 @@ Users can switch between models:
 - Upgrade to **Extend My Laptop** when they need scheduling/automation
 - Downgrade back to **Local Only** anytime (Extend My Laptop infrastructure can be destroyed)
 
+[↑ Back to Top](#-table-of-contents)
+
 ---
 
-### **Alert & Event Handling Architecture**
+## Alert & Event Handling Architecture
 
-Escher provides **two types of alert systems** to ensure comprehensive monitoring - "Sensors" that act like the nervous system, continuously monitoring the cloud environment and alerting the "Brain" (AI Server) when action is needed.
+Escher provides **two types of alert systems** - "Sensors" that continuously monitor the cloud environment and alert the "Brain" (AI Server) when action is needed.
 
-#### **1. Real-Time Operational Alerts** (🚨 Can't Wait - Immediate Action Required)
+### **Quick Comparison**
 
-**Purpose**: Immediate notification and action for critical events that require urgent attention
+| Type | Real-Time Operational | Scheduled Scan |
+|---|---|---|
+| **Trigger** | Critical events happen | Daily at 2am |
+| **Purpose** | Immediate action | Proactive insights |
+| **Examples** | DB down, S3 public | Cost trends, idle VMs |
+| **Delivery** | Push notifications | Morning report banner |
+| **Response Time** | Seconds | Next day |
+| **Auto-Fix** | Yes (pre-approved) | Yes (1-click buttons) |
 
-**Target Events**:
-- 🔴 **CRITICAL**: Production database down, security breach (public S3 with PII), service outage, budget exceeded 200%
-- 🟠 **HIGH**: Performance degradation, significant cost spike, compliance violation, resource failure
-- 🟡 **MEDIUM**: Resource warnings, capacity approaching limits, optimization opportunities
-- ℹ️ **INFO**: Informational events (aggregated in morning report)
+---
 
-**Setup Process** (During Extend My Laptop Installation):
+### **1. Real-Time Operational Alerts** (🚨 Can't Wait - Immediate Action Required)
 
-1. **Add Escher Listener to Source of Truth**:
-   User grants Escher permission to add event listeners to cloud-native alert sources:
-   - **AWS**: CloudWatch Alarms → EventBridge → Extend My Laptop
-   - **Azure**: Azure Monitor Alerts → Event Grid → Extend My Laptop
-   - **GCP**: Cloud Monitoring → Pub/Sub → Extend My Laptop
+#### **Purpose**
+Immediate notification and action for critical events that require urgent attention.
 
-2. **Pre-Approve Auto-Remediation** (Setup Wizard):
-   User chooses which "first aid" actions Escher can perform automatically:
-   ```
-   ☑️ Automatically make public S3 buckets private
-   ☑️ Automatically stop idle instances after 2 hours
-   ☑️ Automatically enable encryption on unencrypted volumes
-   ☑️ Automatically scale up resources approaching capacity
-   ☐ Automatically restart failed services
-   ☐ Automatically rollback failed deployments
-   ```
-   - User can modify these settings anytime in application settings
-   - Each auto-remediation action logs to immutable audit trail
+#### **Target Events by Severity**
 
-**Real-Time Alert Flow**:
+| Severity | Examples | Response Time |
+|---|---|---|
+| 🔴 **CRITICAL** | DB down, S3 public (PII), budget exceeded 200% | Immediate |
+| 🟠 **HIGH** | Performance degradation, cost spike, compliance violation | < 5 minutes |
+| 🟡 **MEDIUM** | Resource warnings, capacity approaching limits | < 15 minutes |
+| ℹ️ **INFO** | Informational events | Aggregated in morning report |
+
+#### **Setup Process** (During Extend My Laptop Installation)
+
+**Step 1: Add Escher Listener to Source of Truth**
+User grants permission to add event listeners:
+- **AWS**: CloudWatch Alarms → EventBridge → Extend My Laptop
+- **Azure**: Azure Monitor Alerts → Event Grid → Extend My Laptop
+- **GCP**: Cloud Monitoring → Pub/Sub → Extend My Laptop
+
+**Step 2: Pre-Approve Auto-Remediation** (Setup Wizard)
+```
+☑️ Automatically make public S3 buckets private
+☑️ Automatically stop idle instances after 2 hours
+☑️ Automatically enable encryption on unencrypted volumes
+☑️ Automatically scale up resources approaching capacity
+☐ Automatically restart failed services
+☐ Automatically rollback failed deployments
+```
+- User can modify these settings anytime
+- Each action logs to immutable audit trail
+
+#### **Real-Time Alert Flow**
 
 ```
 Critical Event Occurs (e.g., S3 bucket made public)
 ↓
-Cloud-Native Alert (CloudWatch/Azure Monitor/GCP Monitoring) detects at source of truth
+Cloud-Native Alert detects at source of truth
 ↓
 Event published to EventBridge/Event Grid/Pub Sub
 ↓
-Extend My Laptop wakes up (Fargate/Container Instance/Cloud Run triggered)
+Extend My Laptop wakes up (Fargate/Container Instance/Cloud Run)
 ↓
-Extend My Laptop loads RAG from S3/Blob/GCS:
-├─ Estate: Which S3 bucket? Production or dev? Contains PII?
-├─ Alert Rules: User's configured severity thresholds and customized critical definitions
-├─ Previous Incidents: Similar alerts in past? How resolved?
+Loads RAG from S3/Blob/GCS:
+├─ Estate: Which bucket? Production or dev? Contains PII?
+├─ Alert Rules: User's configured severity thresholds
+├─ Previous Incidents: Similar alerts? How resolved?
 └─ Auto-Remediation Settings: Is "make bucket private" pre-approved?
 ↓
-Normalize event to unified schema:
-├─ event_type: "s3_bucket_public"
-├─ severity: Auto-calculated based on estate context (PII detected = CRITICAL)
-├─ resource: { bucket_name, region, account_id, tags }
-├─ context: { environment: "production", data_classification: "PII" }
-└─ timestamp: ISO-8601
+Normalize event to unified schema
 ↓
 Send unified event + context to AI Server (Escher Brain)
 ↓
 AI Server analyzes:
 ├─ Severity Assessment: CRITICAL (PII exposed publicly)
-├─ Root Cause: Security group rule changed by user john@company.com at 10:34 AM
-├─ First Aid Recommendation: Make bucket private immediately (aws s3api put-bucket-acl)
-├─ Impact Assessment: ~1.2M customer records exposed, zero downtime to fix
-├─ Playbook: Step-by-step remediation + prevent future occurrences
-└─ Risk: If not fixed within 1 hour, potential GDPR violation
-↓
-Response sent back to Extend My Laptop
+├─ Root Cause: Security group rule changed by john@company.com
+├─ First Aid Recommendation: Make bucket private immediately
+├─ Impact Assessment: ~1.2M customer records exposed
+├─ Playbook: Step-by-step remediation
+└─ Risk: GDPR violation if not fixed within 1 hour
 ↓
 Decision Point - Is auto-remediation pre-approved?
-├─ YES → Execute immediately:
+├─ YES → Execute immediately ✅
 │   ├─ Run: aws s3api put-bucket-acl --bucket my-data --acl private
-│   ├─ Verify: Bucket now private ✅
-│   ├─ Store result in RAG (Alerts & Events collection)
+│   ├─ Verify: Bucket now private
+│   ├─ Store result in RAG
 │   └─ Prepare notification: "CRITICAL alert auto-resolved"
-│
-└─ NO → Request approval:
+└─ NO → Request approval
     ├─ Store alert in RAG
     └─ Prepare notification: "CRITICAL alert requires approval"
 ↓
 Notification via cloud-native services:
-├─ 🔴 CRITICAL: AWS SNS/Azure Notification Hubs/GCP Cloud Messaging
-│   └─ Channels: Email + SMS + Slack/PagerDuty
-│   └─ Message: "🚨 CRITICAL: S3 bucket 'my-data' made public. AUTO-RESOLVED: Made private. Review details in Escher."
+├─ 🔴 CRITICAL: Email + SMS + Slack/PagerDuty
 ├─ 🟠 HIGH: Email + Slack only
-│   └─ Message: "⚠️ HIGH: 3 EC2 instances idle for 7 days. Approval needed to stop. Open Escher to review."
 └─ 🟡 MEDIUM: In-app notification banner
-    └─ Message: "ℹ️ MEDIUM: RDS snapshot storage increased 25GB. View recommendations."
 ↓
-Store complete alert record in RAG (Alerts & Events collection):
-├─ Event details, AI analysis, action taken, notification sent
-├─ Immutable (cannot be modified after creation)
-└─ Used for queries, comparisons, and compliance reporting
+Store complete alert record in RAG (immutable)
 ↓
-Extend My Laptop shuts down (event-based lifecycle)
-↓
-**User Experience - When User Opens Physical Laptop:**
+Extend My Laptop shuts down
+```
 
-When Physical Laptop Connects:
-├─ Syncs latest state from S3/Blob/GCS
-├─ Discovers new alerts in RAG (Alerts & Events collection)
-└─ Displays alert banner based on severity
+#### **User Experience - Alert Banners**
 
-🔴 CRITICAL Alert Banner (Red background, top of screen):
+**🔴 CRITICAL Alert Banner** (Red background, top of screen):
+```
 ┌────────────────────────────────────────────────────────────┐
 │ 🚨 CRITICAL ALERT - AUTO-RESOLVED 2 minutes ago            │
 │                                                            │
@@ -293,13 +335,14 @@ When Physical Laptop Connects:
 │ 1. Review bucket policy to prevent future occurrences    │
 │ 2. Notify security team about exposure                   │
 │ 3. Check CloudTrail for access during exposure window    │
-│ 4. Update IAM policy to restrict public bucket creation  │
 │                                                            │
 │ [View Full Timeline] [Create Prevention Playbook]         │
 │ [Notify Security Team] [Acknowledge]                      │
 └────────────────────────────────────────────────────────────┘
+```
 
-🟠 HIGH Alert Banner (Orange background):
+**🟠 HIGH Alert Banner** (Orange background):
+```
 ┌────────────────────────────────────────────────────────────┐
 │ ⚠️ HIGH ALERT - Requires Your Approval                    │
 │                                                            │
@@ -310,8 +353,6 @@ When Physical Laptop Connects:
 │ • i-abc123 (dev) - t3.large - $52/month                  │
 │ • i-def456 (dev) - t3.large - $52/month                  │
 │ • i-ghi789 (dev) - t3.medium - $35/month                 │
-│ • i-jkl012 (staging) - t3.large - $52/month              │
-│ • i-mno345 (staging) - t3.medium - $12/month             │
 │                                                            │
 │ 💬 Ask: "Is it safe to stop these instances?"           │
 │ 💬 Ask: "What are they used for?"                       │
@@ -319,28 +360,28 @@ When Physical Laptop Connects:
 │ [Stop All] [Stop Dev Only] [Remind Me Tomorrow]          │
 │ [View Details] [Dismiss]                                  │
 └────────────────────────────────────────────────────────────┘
+```
 
-**Conversational Follow-Up:**
+#### **Conversational Follow-Up**
+User can ask questions about any alert:
 
-User can ask questions about the alert:
+**User**: "Show me the full timeline of the S3 bucket exposure"
 
-User: "Show me the full timeline of the S3 bucket exposure"
-
-AI Response:
-"Here's the complete timeline of the S3 bucket 'my-data' security incident:
+**AI Response**:
+```
+Here's the complete timeline:
 
 2:32:15 AM - Bucket policy changed by john@company.com
 2:32:15 AM - CloudWatch detected public access enabled
-2:32:20 AM - EventBridge published event to Extend My Laptop
-2:32:22 AM - Extend My Laptop started (Fargate)
-2:32:25 AM - RAG loaded: Bucket contains PII (customer data)
+2:32:20 AM - EventBridge published event
+2:32:22 AM - Extend My Laptop started
+2:32:25 AM - RAG loaded: Bucket contains PII
 2:32:26 AM - Event sent to AI Server for analysis
 2:32:28 AM - AI Server: Severity = CRITICAL (PII exposed)
-2:32:29 AM - Auto-remediation check: APPROVED (pre-configured)
-2:32:30 AM - Executed: aws s3api put-bucket-acl --bucket my-data --acl private
+2:32:29 AM - Auto-remediation check: APPROVED
+2:32:30 AM - Executed: aws s3api put-bucket-acl
 2:32:32 AM - Verification: Bucket now private ✅
 2:32:33 AM - Notifications sent: Email + SMS + Slack
-2:32:34 AM - Alert stored in RAG (immutable)
 2:34:45 AM - Extend My Laptop shutdown
 
 **Total exposure time: 2 minutes 17 seconds**
@@ -351,54 +392,18 @@ CloudTrail Analysis:
 • Risk: LOW (exposure was brief, no unauthorized access)
 
 Would you like me to:
-1. Create a prevention playbook to restrict public bucket creation?
-2. Send security incident report to security@company.com?
-3. Review IAM policies for john@company.com?"
-
-**Alert Persistence:**
-
-All alerts remain in UI until explicitly acknowledged:
-- 🔴 CRITICAL: Red banner persists until acknowledged
-- 🟠 HIGH: Orange banner persists until action taken or dismissed
-- 🟡 MEDIUM: Auto-dismisses after 24 hours or when acknowledged
-- ℹ️ INFO: Aggregated in morning report (no banner)
-
-**Alert History:**
-
-User can view all alerts:
-```
-User: "Show me all alerts from last 7 days"
-
-AI Response:
-"Here are all alerts from the last 7 days:
-
-🔴 CRITICAL (2 alerts):
-1. Yesterday 2:34 AM - S3 bucket made public → AUTO-RESOLVED
-2. 3 days ago 11:47 PM - Production RDS exceeded 90% capacity → AUTO-RESOLVED (auto-scaled)
-
-🟠 HIGH (5 alerts):
-1. Yesterday 10:15 AM - Cost spike +$186 (+17%) → ACKNOWLEDGED
-2. 2 days ago 3:22 PM - Security group opened port 22 to 0.0.0.0/0 → AUTO-RESOLVED
-3. 4 days ago 9:05 AM - 5 idle instances detected → PENDING APPROVAL
-4. 5 days ago 4:30 PM - RDS backup failed → ACKNOWLEDGED (resolved)
-5. 6 days ago 1:15 PM - IAM password policy violation → ACKNOWLEDGED (fixed)
-
-🟡 MEDIUM (12 alerts):
-[Click to expand]
-
-💬 Ask me for details on any alert"
-```
+1. Create a prevention playbook?
+2. Send security incident report?
+3. Review IAM policies for john@company.com?
 ```
 
-**Unified Event Schema** (Cross-Cloud Normalization):
-
-All cloud events are normalized to a unified schema before sending to AI Server:
+#### **Unified Event Schema** (Cross-Cloud Normalization)
 
 ```typescript
 interface UnifiedEvent {
   event_id: string;
-  event_type: string; // "s3_bucket_public", "vm_stopped", "cost_spike", etc.
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "INFO"; // Auto-calculated or user-customized
+  event_type: string; // "s3_bucket_public", "vm_stopped", "cost_spike"
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "INFO";
   cloud_provider: "aws" | "azure" | "gcp";
   account_id: string;
   region: string;
@@ -412,85 +417,80 @@ interface UnifiedEvent {
   context: {
     environment?: "production" | "staging" | "dev";
     data_classification?: "PII" | "confidential" | "public";
-    cost_impact?: number; // USD per day
+    cost_impact?: number;
     affected_users?: number;
   };
   timestamp: string; // ISO-8601
-  raw_event: any; // Original cloud-specific event for reference
+  raw_event: any; // Original cloud-specific event
 }
 ```
 
-**Notification Channels** (Cloud-Native):
-
-- **AWS**: Amazon SNS → Email, SMS, Slack (via webhook), PagerDuty (via integration)
-- **Azure**: Azure Notification Hubs → Email, SMS, Teams, Slack
-- **GCP**: Cloud Messaging → Email, SMS, Slack, PagerDuty
-
-**Local Only Limitation**:
+#### **Local Only Limitation**
 - Real-time alerts require **Extend My Laptop** for 24/7 monitoring
 - OR laptop must remain **always-on** for Local Only mode
-- Local Only users with always-on can receive real-time alerts via polling (every 1 minute for CRITICAL, every 5 minutes for HIGH)
+- Local Only users with always-on can receive alerts via polling (every 1 minute for CRITICAL)
+
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
-#### **2. Scheduled Scan Alerts** (ℹ️ Can Wait - Interactive Morning Report)
+### **2. Scheduled Scan Alerts** (ℹ️ Can Wait - Interactive Morning Report)
 
-**Purpose**: Proactive monitoring, optimization suggestions, and aggregated insights delivered daily
+#### **Purpose**
+Proactive monitoring, optimization suggestions, and aggregated insights delivered daily.
 
-**Scan Schedule**: Daily at 2am (same as cost/audit sync), user-configurable
+#### **Scan Schedule**
+Daily at 2am (same as cost/audit sync), user-configurable.
 
-**Scans Performed**:
-- 💰 **Cost Analysis**: Spending trends, budget tracking, anomaly detection, waste identification
-- 🔒 **Security Posture**: Compliance checks (CIS, SOC2, HIPAA), policy violations, encryption status
-- ⚡ **Resource Optimization**: Idle resources, rightsizing opportunities, over-provisioned VMs
-- 🔧 **Operational Health**: Backup status, snapshot age, service availability, performance metrics
-- 📊 **Performance Monitoring**: Resource utilization, bottlenecks, capacity planning
+#### **Scans Performed**
 
-**Scheduled Scan Flow**:
+| Category | What It Checks |
+|---|---|
+| 💰 **Cost Analysis** | Spending trends, budget tracking, anomaly detection, waste |
+| 🔒 **Security Posture** | Compliance (CIS, SOC2), policy violations, encryption |
+| ⚡ **Resource Optimization** | Idle resources, rightsizing, over-provisioned VMs |
+| 🔧 **Operational Health** | Backup status, snapshot age, service availability |
+| 📊 **Performance** | Resource utilization, bottlenecks, capacity planning |
+
+#### **Scheduled Scan Flow**
 
 ```
-2am: Scheduler triggers daily scan (EventBridge/Logic Apps/Cloud Scheduler)
+2am: Scheduler triggers daily scan
 ↓
-Extend My Laptop wakes up (or Physical Laptop if Local Only and online)
+Extend My Laptop wakes up (or Physical Laptop if online)
 ↓
 Execute scans across all clouds in parallel:
-├─ AWS Cost Explorer API (yesterday's costs, budget status)
-├─ Azure Cost Management API (spending trends, anomalies)
-├─ GCP Billing API (cost breakdown, forecasts)
-├─ Security scans (public resources, encryption validation, IAM analysis)
-├─ Performance metrics (CloudWatch, Azure Monitor, GCP Monitoring)
-└─ Resource inventory (idle instances, old snapshots, unattached volumes)
+├─ AWS Cost Explorer API (yesterday's costs)
+├─ Azure Cost Management API (spending trends)
+├─ GCP Billing API (cost breakdown)
+├─ Security scans (public resources, encryption)
+├─ Performance metrics (CloudWatch/Azure Monitor/GCP Monitoring)
+└─ Resource inventory (idle instances, old snapshots)
 ↓
 Load RAG from S3/Blob/GCS:
-├─ Estate: Current resource inventory for comparison
-├─ Previous Scans: Yesterday's results to calculate deltas
-├─ Alert Rules: User's customized thresholds (e.g., alert if cost > $100 increase)
-├─ Immutable Reports: Historical cost/security data for trend analysis
-└─ Report Templates: User's customized morning report preferences
+├─ Estate: Current inventory for comparison
+├─ Previous Scans: Yesterday's results for deltas
+├─ Alert Rules: User's customized thresholds
+├─ Immutable Reports: Historical data for trends
+└─ Report Templates: User's customized preferences
 ↓
 Send scan results + context to AI Server
 ↓
 AI Server analyzes:
-├─ Aggregate findings (group similar issues: "5 idle instances" not "Instance 1 idle, Instance 2...")
-├─ Calculate deltas (what changed since yesterday?)
-├─ Prioritize by severity and cost impact (sort by potential savings)
-├─ Generate actionable recommendations (with 1-click fix options)
-├─ Create interactive morning report using user's template
-└─ Format for conversational Q&A (enable "ask me anything" on report)
+├─ Aggregate findings (group similar issues)
+├─ Calculate deltas (what changed?)
+├─ Prioritize by severity and cost impact
+├─ Generate actionable recommendations (1-click fixes)
+├─ Create interactive morning report
+└─ Format for conversational Q&A
 ↓
-Store report in Immutable Reports (Alerts & Events collection):
-├─ Acts as aggregated data for historical queries and comparisons
-├─ Permanent storage (not deleted after 7 days)
-├─ Enables: "Compare this week vs last week" queries
-└─ Enables: "Show me cost trends over 3 months" analysis
-↓
-Extend My Laptop uploads RAG to S3/Blob/GCS → Shuts down
+Store report in Immutable Reports (permanent storage)
 ↓
 When user opens laptop:
-Display interactive morning report banner with AI-powered Q&A
+Display interactive morning report banner
 ```
 
-**Interactive Morning Report** (Better Than Email):
+#### **Interactive Morning Report** (Better Than Email)
 
 ```
 ☀️ Good Morning Report - March 15, 2025
@@ -499,14 +499,14 @@ Generated at 2:00 AM | Data current as of 11:59 PM yesterday
 ────────────────────────────────────────────────────────────
 
 🚨 CRITICAL ALERTS (Last 24h):
-[Highlighted in red background, requires immediate attention]
+[Red background, requires immediate attention]
 
-• Production RDS instance exceeded 90% storage capacity
-  └─ Auto-scaled from 100GB → 150GB ✅ (Cost impact: +$7.50/month)
+• Production RDS exceeded 90% storage capacity
+  └─ Auto-scaled from 100GB → 150GB ✅ (+$7.50/month)
   └─ Root cause: Log retention increased from 7 to 30 days
 
 • Security group sg-abc123 opened port 22 to 0.0.0.0/0
-  └─ Auto-remediated: Restricted to company IP range ✅
+  └─ Auto-remediated: Restricted to company IP ✅
   └─ Alert sent to: security@company.com
 
 ────────────────────────────────────────────────────────────
@@ -533,7 +533,6 @@ Top Cost Drivers (Yesterday):
    • Cost Impact: +$144/day ($4,320/month)
    • Launched by: john@company.com at 10:34 AM
    • Purpose (from tags): "web-tier-scaling"
-   • Status: Currently running
 
    💬 Ask: "Why were these instances created?"
    💬 Ask: "Are these still needed?"
@@ -542,11 +541,9 @@ Top Cost Drivers (Yesterday):
 2. 🟡 RDS snapshot storage increased 25GB
    • New Size: 125GB (+25GB from yesterday)
    • Cost Impact: +$2.50/day
-   • Reason: Daily automated snapshots accumulating
-   • Current: 42 snapshots (retention: 30 days)
+   • Reason: Daily snapshots accumulating
 
    💬 Ask: "Can we reduce snapshot retention to 7 days?"
-   💬 Ask: "How much will I save?"
    🔧 1-Click: Reduce retention to 7 days (saves $18/month)
 
 ────────────────────────────────────────────────────────────
@@ -562,17 +559,17 @@ Top Cost Drivers (Yesterday):
 • 2 unencrypted EBS volumes detected
   └─ Environment: dev-environment
   └─ Volumes: vol-abc123 (50GB), vol-def456 (100GB)
-  └─ Risk: Medium (dev data, but may contain test PII)
+  └─ Risk: Medium (dev data, may contain test PII)
 
   💬 Ask: "Show me these volumes"
   💬 Ask: "What data is on them?"
-  🔧 1-Click: Enable encryption (creates encrypted copy, migrates data)
+  🔧 1-Click: Enable encryption
 
 ────────────────────────────────────────────────────────────
 
 ⚡ OPTIMIZATION OPPORTUNITIES:
 
-💡 5 idle EC2 instances detected (Potential savings: $203/month)
+💡 5 idle EC2 instances detected (Saves: $203/month)
 • Criteria: CPU < 5% for 7 consecutive days
 • Instances: i-abc123, i-def456, i-ghi789, i-jkl012, i-mno345
 • Environment: dev (3), staging (2)
@@ -580,9 +577,9 @@ Top Cost Drivers (Yesterday):
 💬 Ask: "Which instances are idle?"
 💬 Ask: "What are they used for?"
 💬 Ask: "Is it safe to stop them?"
-🔧 Stop All Idle Instances | 🔧 Stop Dev Only | ℹ️ Remind Me Tomorrow
+🔧 Stop All | 🔧 Stop Dev Only | ℹ️ Remind Me Tomorrow
 
-💡 3 over-provisioned VMs (Potential savings: $142/month)
+💡 3 over-provisioned VMs (Saves: $142/month)
 • Criteria: Average utilization < 30% over 30 days
 • Recommendations:
   - vm-web-01: m5.2xlarge → m5.xlarge (save $72/month)
@@ -593,10 +590,9 @@ Top Cost Drivers (Yesterday):
 💬 Ask: "Will downsizing impact performance?"
 🔧 View Rightsizing Recommendations
 
-💡 67GB of old EBS snapshots (Potential savings: $6.70/month)
+💡 67GB of old EBS snapshots (Saves: $6.70/month)
 • Criteria: Snapshots older than 90 days, source volume deleted
 • Count: 13 snapshots
-• Total Size: 67GB
 
 💬 Ask: "Are these snapshots safe to delete?"
 🔧 Delete Old Snapshots
@@ -609,10 +605,6 @@ Top Cost Drivers (Yesterday):
 • All backups successful (42 RDS snapshots, 18 EC2 AMIs)
 • No failed deployments
 • Service availability: 100% uptime
-
-⚠️ MAINTENANCE RECOMMENDED:
-• 1 RDS snapshot older than 30 days (snap-abc123, 5GB, $0.50/month)
-  └─ Recommendation: Delete or archive to S3 Glacier (90% cost reduction)
 
 ────────────────────────────────────────────────────────────
 
@@ -629,27 +621,27 @@ Examples:
 Type your question below ↓
 ```
 
-**Interactive Q&A on Report**:
+#### **Interactive Q&A on Report**
 
-User can ask questions about the report conversationally. The AI Server has the complete report context and can answer any question:
+User can ask questions conversationally. The AI Server has complete report context:
 
+**User**: "Why did spending increase 17%?"
+
+**AI Response**:
 ```
-User: "Why did spending increase 17%?"
-
-AI Response:
-"Spending increased by $186 (17.5%) yesterday due to three main factors:
+Spending increased by $186 (17.5%) yesterday due to three factors:
 
 1. **3 new EC2 instances in production** (+$144/day = 77% of increase)
    - Instance IDs: i-0a1b2c3, i-4d5e6f7, i-8g9h0i1
    - Type: m5.2xlarge (8 vCPU, 32GB RAM) - $0.384/hour each
    - Launched: Yesterday 10:34 AM by john@company.com
    - Purpose (from tags): "web-tier-scaling" for Black Friday prep
-   - Running time: 13.5 hours = $15.60 each = $46.80 total (but daily cost will be $144)
+   - Running time: 13.5 hours = $46.80 total (daily cost will be $144)
 
 2. **RDS storage auto-scaling** (+$25/day = 13% of increase)
    - Database: prod-db-01 scaled from 100GB → 150GB
    - Trigger: 90% capacity threshold reached
-   - Root cause: Log retention changed from 7 → 30 days (3.2GB logs/day)
+   - Root cause: Log retention changed from 7 → 30 days
    - Cost: $0.115/GB-month = $2.50/day additional
 
 3. **Increased S3 storage** (+$12/day = 6% of increase)
@@ -658,23 +650,23 @@ AI Response:
    - Cost: $0.023/GB-month = $12/day
 
 💡 **To reduce costs**:
-- If Black Friday prep is complete, stop the 3 EC2 instances (saves $144/day)
+- If Black Friday prep complete, stop 3 EC2 instances (saves $144/day)
 - Reduce RDS log retention to 14 days (saves $10/day)
 - Enable S3 Intelligent-Tiering for logs (saves ~30% = $3.60/day)
 
 **Total potential daily savings: $157.60 ($4,728/month)**
 
 Would you like me to:
-1. Check if the EC2 instances are still needed (analyze current load)?
+1. Check if EC2 instances are still needed?
 2. Create a playbook to optimize these costs?
-3. Schedule automatic shutdown of instances after business hours?"
+3. Schedule automatic shutdown after business hours?
 ```
 
-**Report Customization** (Template Models):
+#### **Report Customization** (Template Models)
 
 **Default Template** (Escher provides):
 - Comprehensive morning report (shown above)
-- Includes: Critical alerts, cost summary, security, optimization, operational health
+- Includes: Critical alerts, cost, security, optimization, operational health
 - Format: Concise, scannable, actionable
 - Q&A enabled by default
 
@@ -688,7 +680,7 @@ Report Settings:
 │   ☑️ Security & Compliance
 │   ☑️ Optimization Opportunities
 │   ☑️ Operational Health
-│   ☐ Performance Metrics (optional, adds detailed graphs)
+│   ☐ Performance Metrics (optional, adds graphs)
 │
 ├─ Thresholds:
 │   • Cost increase alert: >$100 or >10% (customizable)
@@ -697,28 +689,26 @@ Report Settings:
 │
 ├─ Focus Areas:
 │   ○ Balanced (default - equal weight to all areas)
-│   ○ Cost-Focused (emphasize savings opportunities)
-│   ○ Security-Focused (emphasize compliance and vulnerabilities)
-│   ○ Operational-Focused (emphasize uptime and performance)
+│   ○ Cost-Focused (emphasize savings)
+│   ○ Security-Focused (emphasize compliance)
+│   ○ Operational-Focused (emphasize uptime)
 │
 ├─ Format:
-│   ○ Detailed (default - shown above, ~50 lines)
+│   ○ Detailed (default - ~50 lines)
 │   ○ Compact (summary only, ~20 lines)
-│   ○ Executive (high-level metrics + top 3 issues, ~15 lines)
+│   ○ Executive (high-level + top 3 issues, ~15 lines)
 │
 └─ Severity Customization:
-    • Define what's "CRITICAL" for your organization:
-      ☑️ Any public S3 bucket
-      ☑️ Budget overrun >$1000
-      ☐ Any unencrypted volume (default: only production)
-      ☑️ Production database >85% capacity
+    Define what's "CRITICAL" for your organization:
+    ☑️ Any public S3 bucket
+    ☑️ Budget overrun >$1000
+    ☐ Any unencrypted volume (default: only production)
+    ☑️ Production database >85% capacity
 ```
 
-**Template Storage**: Stored in RAG (Alerts & Events collection), synced across devices
+**Template Storage**: Stored in RAG (Alerts & Events collection), synced across devices.
 
-**Deployment Model Differences**:
-- **Local Only**: Scans run on physical laptop (must be online at 2am or miss that day's report)
-- **Extend My Laptop**: Scans run in cloud reliably every day, report ready when user wakes up
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
@@ -726,155 +716,154 @@ Report Settings:
 
 ### **Stateless Processing Engine**
 
-The Escher AI Server is a **pure stateless processing engine** - it receives requests, processes them using RAG (Retrieval-Augmented Generation), and returns responses without storing any user data.
+The Escher AI Server is a **pure stateless processing engine** - it receives requests, processes them using RAG, and returns responses without storing any user data.
 
 ### **Server Capabilities**
 
-**Built-in RAG Knowledge Base:**
-- **Playbook Library**: Comprehensive library of cloud operation playbooks (AWS, Azure, GCP)
-- **CLI Command Database**: Complete reference of cloud CLI commands and their usage
-- **Best Practices**: Cloud architecture patterns, security guidelines, cost optimization strategies
-- **Multi-Cloud Operations**: Cross-cloud equivalents and migration patterns
-
-**AI Processing:**
-- Natural language understanding (user intent extraction)
-- Context-aware response generation
-- Operation planning and sequencing
-- Playbook generation and customization
-- Anomaly detection and recommendations
+```
+┌─────────────────────────────────────────────────────────────┐
+│               ESCHER AI SERVER (STATELESS)                  │
+├─────────────────────────────────────────────────────────────┤
+│  Built-in RAG Knowledge Base:                               │
+│  • Playbook Library (AWS, Azure, GCP operations)            │
+│  • CLI Command Database (complete reference)                │
+│  • Best Practices (architecture, security, cost)            │
+│  • Multi-Cloud Operations (equivalents, migrations)         │
+├─────────────────────────────────────────────────────────────┤
+│  AI Processing:                                             │
+│  • Natural language understanding                           │
+│  • Context-aware response generation                        │
+│  • Operation planning and sequencing                        │
+│  • Playbook generation and customization                    │
+│  • Anomaly detection and recommendations                    │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### **Data Flow Details**
 
-#### **1. Interactive Query Flow (Physical/Extend My Laptop → AI Server)**
+#### **1. Interactive Query Flow**
 
 ```
 User: "Show me all running EC2 instances in us-east-1"
 
-Physical/Extend My Laptop (Client-Side Processing):
-├─ Search local RAG (vector store):
-│   ├─ Cloud Estate Inventory: Check for EC2 instances in us-east-1
-│   ├─ Chat History: Retrieve previous conversation context
-│   └─ Executed Operations: Check recent EC2-related operations
+Physical/Extend My Laptop (Client-Side):
+├─ Search local RAG:
+│   ├─ Cloud Estate Inventory: Check for EC2 in us-east-1
+│   ├─ Chat History: Previous conversation context
+│   └─ Executed Operations: Recent EC2-related operations
 └─ Prepare context from RAG results
 
-Physical/Extend My Laptop → Escher AI Server:
-├─ Query: "Show me all running EC2 instances in us-east-1"
-└─ Context from RAG:
-    ├─ Previous chat history (last 5 messages for continuity)
-    ├─ Relevant estate info (EC2 instance count, regions)
-    └─ Recent operations (any EC2 operations in last hour)
+→ Send to Escher AI Server:
+  ├─ Query: "Show me all running EC2 instances in us-east-1"
+  └─ Context: Last 5 messages + relevant estate info
 
-Escher AI Server Processing:
+AI Server Processing:
 ├─ Parse intent: List resources
 ├─ Identify scope: EC2, us-east-1, running state
 ├─ RAG lookup: EC2 list commands/APIs
-├─ Analyze context: Understand user's recent activities
+├─ Analyze context: Recent activities
 └─ Generate response type: Information query (not execution)
 
-Escher AI Server → Physical/Extend My Laptop:
-├─ Response Type: "information" | "execution" | "report"
-├─ Operation: { type: "list_ec2", filters: { region: "us-east-1", state: "running" } }
-└─ Suggested Display: Table format with instance details
+→ Return to Physical/Extend My Laptop:
+  ├─ Response Type: "information"
+  ├─ Operation: { type: "list_ec2", filters: {...} }
+  └─ Suggested Display: Table format
 
 Physical/Extend My Laptop:
-├─ If type = "information": Query cloud APIs locally, display results
-├─ If type = "execution": Execute operation with Rust execution engine
-├─ If type = "report": Generate report and store locally/S3
-└─ Store interaction in RAG (chat history collection)
+├─ Query cloud APIs locally
+├─ Display results
+└─ Store interaction in RAG (chat history)
 ```
 
 **Key Points:**
-- **Client searches RAG first**: Cloud estate inventory, chat history, executed operations
-- **Context sent to AI Server**: Previous chat history + relevant RAG results (not full snapshot)
-- **AI Server processes transiently**: Does not store context, forgets after response
-- **Privacy preserved**: AI Server never stores cloud estate, credentials, or chat history
+- ✅ **Client searches RAG first**: Estate, chat history, operations
+- ✅ **Context sent to AI Server**: Previous chat + relevant RAG results (not full snapshot)
+- ✅ **AI Server processes transiently**: Forgets everything after response
+- ✅ **Privacy preserved**: AI Server never stores cloud estate or credentials
 
-#### **2. Execution Flow (User → AI Server → Execution)**
+#### **2. Execution Flow**
 
 ```
 User: "Stop all dev EC2 instances in us-east-1"
 
-Physical/Extend My Laptop (Client-Side Processing):
-├─ Search local RAG (vector store):
-│   ├─ Cloud Estate Inventory: Find all dev EC2 instances in us-east-1
-│   ├─ Chat History: Retrieve full conversation history (for LLM context)
-│   └─ Executed Operations: Recent EC2-related operations
+Physical/Extend My Laptop (Client-Side):
+├─ Search local RAG:
+│   ├─ Cloud Estate Inventory: Find all dev EC2 in us-east-1
+│   ├─ Chat History: Full conversation history (for LLM context)
+│   └─ Executed Operations: Recent EC2 operations
 └─ Prepare context from RAG results
 
-Physical/Extend My Laptop → Escher AI Server:
-├─ Query: "Stop all dev EC2 instances in us-east-1"
-└─ Context from RAG:
-    ├─ Full chat history (entire conversation for LLM context)
-    ├─ Dev instances found: 5 instances with tag=dev in us-east-1 (i-xxx, i-yyy, ...)
-    └─ Recent operations: List of recent EC2 operations (if any)
+→ Send to Escher AI Server:
+  ├─ Query: "Stop all dev EC2 instances in us-east-1"
+  └─ Context:
+      ├─ Full chat history
+      ├─ Dev instances found: 5 instances (i-xxx, i-yyy, ...)
+      └─ Recent operations
 
-Escher AI Server:
+AI Server:
 ├─ Intent: Stop resources
 ├─ Scope: EC2, us-east-1, tag=dev
-├─ Context understanding: Full conversation history allows LLM to understand user's intent
+├─ Context understanding: Full conversation allows LLM to understand intent
 ├─ RAG lookup: Stop EC2 playbook
 ├─ Safety check: High-risk operation (stops multiple instances)
 └─ Generate execution plan
 
-Escher AI Server → Physical/Extend My Laptop:
-├─ Response Type: "execution"
-├─ Execution Plan:
-│   ├─ Step 1: List EC2 instances with tag=dev in us-east-1 (5 instances found)
-│   ├─ Step 2: Confirm instances with user
-│   └─ Step 3: Stop instances (AWS CLI: aws ec2 stop-instances --instance-ids i-xxx i-yyy ...)
-└─ Estimated Impact: 5 instances affected
+→ Return to Physical/Extend My Laptop:
+  ├─ Response Type: "execution"
+  ├─ Execution Plan:
+  │   ├─ Step 1: List EC2 instances with tag=dev
+  │   ├─ Step 2: Confirm instances with user
+  │   └─ Step 3: Stop instances (aws ec2 stop-instances...)
+  └─ Estimated Impact: 5 instances affected
 
 Physical/Extend My Laptop Rust Execution Engine:
 ├─ Display execution plan to user
 ├─ Request user confirmation
 ├─ Execute playbook steps
-├─ Store results in RAG (Executed Operations collection)
-└─ Store audit log in RAG (Immutable Reports collection)
-
-**Note**: Risk levels and approval workflows are not yet designed (see Collaboration & Approval Workflows section)
+├─ Store results in RAG (Executed Operations)
+└─ Store audit log in RAG (Immutable Reports)
 ```
 
-#### **3. Scheduled Job Flow (Extend My Laptop → AI Server)**
+#### **3. Scheduled Job Flow**
 
 ```
 Scheduled Job: "Stop all dev VMs at 8pm daily"
 
-EventBridge/Cloud Scheduler → Extend My Laptop (Fargate/Container Instance/Cloud Run)
-└─ Trigger: Scheduled job execution
-
-Extend My Laptop (Client-Side Processing):
+EventBridge/Cloud Scheduler → Extend My Laptop
+↓
+Extend My Laptop (Client-Side):
 ├─ Load RAG from S3/Blob/GCS:
-│   ├─ Cloud Estate Inventory: Find all dev VMs across clouds
-│   ├─ Chat History: Load schedule creation context (when Manager created this schedule)
-│   └─ Executed Operations: Check previous executions of this schedule
+│   ├─ Cloud Estate: Find all dev VMs across clouds
+│   ├─ Chat History: Schedule creation context
+│   └─ Executed Operations: Previous executions
 └─ Prepare context from RAG results
 
-Extend My Laptop → Escher AI Server:
-├─ Query: "Execute scheduled job: Stop all dev VMs at 8pm"
-└─ Context from RAG:
-    ├─ Schedule creation chat history (for LLM context)
-    ├─ Dev VMs found: 15 VMs (5 AWS EC2, 6 Azure VMs, 4 GCP Compute Engine)
-    └─ Last execution: Yesterday at 8pm, 15 VMs stopped successfully
+→ Send to Escher AI Server:
+  ├─ Query: "Execute scheduled job: Stop all dev VMs at 8pm"
+  └─ Context:
+      ├─ Schedule creation chat history
+      ├─ Dev VMs found: 15 VMs (5 AWS, 6 Azure, 4 GCP)
+      └─ Last execution: Yesterday, 15 VMs stopped successfully
 
-Escher AI Server:
+AI Server:
 ├─ Intent: Execute scheduled operation
 ├─ RAG lookup: Stop VMs playbook (multi-cloud)
-├─ Context understanding: Schedule created by Manager, routine daily operation
+├─ Context understanding: Routine daily operation
 ├─ Generate execution plan for all clouds
 └─ Return structured operations
 
-Escher AI Server → Extend My Laptop:
-├─ Response Type: "execution"
-├─ Multi-Cloud Operations:
-│   ├─ AWS: aws ec2 stop-instances --instance-ids i-xxx, i-yyy
-│   ├─ Azure: az vm stop --resource-group dev --name vm1, vm2
-│   └─ GCP: gcloud compute instances stop vm1 vm2 --zone=us-central1-a
-└─ Expected Results: 15 VMs stopped (5 AWS, 6 Azure, 4 GCP)
+→ Return to Extend My Laptop:
+  ├─ Response Type: "execution"
+  ├─ Multi-Cloud Operations:
+  │   ├─ AWS: aws ec2 stop-instances --instance-ids...
+  │   ├─ Azure: az vm stop --resource-group dev...
+  │   └─ GCP: gcloud compute instances stop...
+  └─ Expected Results: 15 VMs stopped
 
 Extend My Laptop Rust Execution Engine:
 ├─ Execute multi-cloud operations in parallel
-├─ Store results in RAG (Executed Operations collection)
-├─ Store audit logs in RAG (Immutable Reports collection)
+├─ Store results in RAG (Executed Operations)
+├─ Store audit logs in RAG (Immutable Reports)
 ├─ Upload RAG to S3/Blob/GCS
 └─ Shutdown (event-based lifecycle)
 ```
@@ -884,117 +873,160 @@ Extend My Laptop Rust Execution Engine:
 ```
 User: "Create a disaster recovery playbook for my production environment"
 
-Physical Laptop (Client-Side Processing):
-├─ Search local RAG (vector store):
-│   ├─ Cloud Estate Inventory: Find all production resources (RDS, EC2, S3, ALB)
-│   ├─ Chat History: Retrieve full conversation history (for LLM context)
-│   └─ Executed Operations: Check existing backups, snapshots, replications
+Physical Laptop (Client-Side):
+├─ Search local RAG:
+│   ├─ Cloud Estate: All production resources
+│   ├─ Chat History: Full conversation history
+│   └─ Executed Operations: Existing backups, snapshots
 └─ Prepare context from RAG results
 
-Physical Laptop → Escher AI Server:
-├─ Query: "Create a disaster recovery playbook for my production environment"
-└─ Context from RAG:
-    ├─ Full chat history (entire conversation for LLM context)
-    ├─ Production inventory: RDS (2 instances), EC2 (12 instances), S3 (5 buckets), ALB (3 load balancers)
-    └─ Existing DR measures: RDS automated backups enabled, no S3 replication, no AMI automation
+→ Send to Escher AI Server:
+  ├─ Query: "Create DR playbook for production"
+  └─ Context:
+      ├─ Full chat history
+      ├─ Production inventory: RDS, EC2, S3, ALB
+      └─ Existing DR: RDS backups enabled, no S3 replication
 
-Escher AI Server:
+AI Server:
 ├─ Intent: Generate playbook
-├─ Context understanding: User needs DR playbook, some measures exist, gaps identified
-├─ RAG lookup: DR best practices, backup strategies, multi-region patterns
-├─ Analyze context: Identify critical resources and missing DR components
+├─ Context understanding: User needs DR playbook, gaps identified
+├─ RAG lookup: DR best practices, backup strategies
+├─ Analyze context: Identify critical resources and missing DR
 └─ Generate custom playbook addressing gaps
 
-Escher AI Server → Physical Laptop:
-├─ Response Type: "playbook"
-├─ Playbook Name: "Production DR Playbook"
-├─ Steps:
-│   ├─ Step 1: Enable automated RDS snapshots (daily) - ✅ Already enabled
-│   ├─ Step 2: Replicate S3 buckets to backup region - ⚠️ Missing, critical
-│   ├─ Step 3: Create AMIs of critical EC2 instances - ⚠️ Missing, recommended
-│   ├─ Step 4: Configure cross-region ALB with health checks
-│   ├─ Step 5: Set up Route53 failover routing
-│   └─ Step 6: Test failover procedure monthly
-├─ Estimated Cost: $X/month (based on current production size)
-└─ Compliance: Meets RTO=4h, RPO=1h requirements
+→ Return to Physical Laptop:
+  ├─ Response Type: "playbook"
+  ├─ Playbook Name: "Production DR Playbook"
+  ├─ Steps:
+  │   ├─ Step 1: Enable RDS snapshots ✅ Already enabled
+  │   ├─ Step 2: Replicate S3 buckets ⚠️ Missing, critical
+  │   ├─ Step 3: Create EC2 AMIs ⚠️ Missing, recommended
+  │   ├─ Step 4: Configure cross-region ALB
+  │   ├─ Step 5: Set up Route53 failover
+  │   └─ Step 6: Test failover monthly
+  ├─ Estimated Cost: $X/month
+  └─ Compliance: Meets RTO=4h, RPO=1h
 
 Physical Laptop:
 ├─ Display playbook to user
 ├─ User reviews/modifies playbook
-├─ Store playbook in RAG (Executed Operations collection)
-└─ User can execute playbook on-demand or schedule it
+├─ Store playbook in RAG (Executed Operations)
+└─ User can execute on-demand or schedule it
 ```
 
 **Playbook Management:**
 - **Escher Playbook Library**: Server provides pre-built playbooks via RAG
-- **User Playbooks**: Users can create/modify playbooks and store them locally or in their cloud
+- **User Playbooks**: Users can create/modify and store locally or in cloud
 - **Playbook Override**: User playbooks override Escher-provided playbooks
-- **Playbook Storage**: Local (Local Only mode) or S3/Blob/GCS (Extend My Laptop mode)
+- **Playbook Storage**: Local (Local Only) or S3/Blob/GCS (Extend My Laptop)
 
-### **RAG Architecture**
+[↑ Back to Top](#-table-of-contents)
 
-**Client-Side RAG (Physical/Extend My Laptop - Rust):**
-- **Local Knowledge Base Collections**:
-  1. **Cloud Estate Inventory**: Current resource inventory across all clouds
-  2. **Chat History**: Conversational history with AI
-  3. **Executed Operations**: History of operations executed
-  4. **Immutable Reports**: Cost reports, audit logs, compliance reports (to avoid repeated API calls)
-  5. **Alerts & Events**: Alert rules, alert history, scan results, auto-remediation settings, report templates, morning reports
-- **Purpose**: Provides context to AI Server queries, enables offline operation documentation
-- **Storage**:
-  - **Local Only**: Local vector store on laptop + periodic backup snapshots to S3/Blob/GCS (hourly, configurable)
-  - **Extend My Laptop**: S3/Blob/GCS vector store (single source of truth)
+---
 
-**Immutable Reports Collection:**
-- **Cost Reports**: Daily snapshots of AWS Cost Explorer, Azure Cost Management, GCP Billing data
+## RAG Architecture
+
+### **Client-Side RAG** (Physical/Extend My Laptop - Rust)
+
+**Local Knowledge Base Collections**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              CLIENT-SIDE RAG (5 COLLECTIONS)                │
+├─────────────────────────────────────────────────────────────┤
+│  1. Cloud Estate Inventory                                  │
+│     Current resource inventory across all clouds            │
+│                                                             │
+│  2. Chat History                                            │
+│     Conversational history with AI                          │
+│                                                             │
+│  3. Executed Operations                                     │
+│     History of operations executed                          │
+│                                                             │
+│  4. Immutable Reports                                       │
+│     Cost reports, audit logs, compliance reports            │
+│     (to avoid repeated API calls)                           │
+│                                                             │
+│  5. Alerts & Events                                         │
+│     Alert rules, alert history, scan results,               │
+│     auto-remediation settings, report templates,            │
+│     morning reports                                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Storage**:
+- **Local Only**: Local vector store on laptop + periodic backup snapshots to S3/Blob/GCS (hourly)
+- **Extend My Laptop**: S3/Blob/GCS vector store (single source of truth)
+
+**Immutable Reports Collection**:
+- **Cost Reports**: Daily snapshots from AWS Cost Explorer, Azure Cost Management, GCP Billing
   - Prevents repeated API calls (reduces cost)
   - Historical cost analysis without hitting cloud APIs
-  - Daily sync scheduled (Manager persona gets updated cost data automatically)
+  - Daily sync scheduled (Manager gets updated data automatically)
 - **Audit Logs**: Immutable log of all operations
-  - Daily sync ensures Manager has complete audit trail
+  - Daily sync ensures complete audit trail
   - Cannot be modified after creation (compliance requirement)
   - Stored in vector store for fast retrieval and AI analysis
-- **Compliance Reports**: Security scans, policy violations, CIS benchmark results
+- **Compliance Reports**: Security scans, policy violations, CIS benchmarks
   - Generated on-demand or scheduled
-  - Stored in vector store for historical comparison
+  - Stored for historical comparison
 
-**Daily Sync for Manager Persona:**
-- **Scheduled Job**: Daily sync at user-configured time (default: 2am)
+**Daily Sync for Manager Persona**:
+- **Scheduled Job**: Daily sync at 2am (user-configurable)
 - **Syncs**:
   - Cost data (AWS Cost Explorer, Azure Cost Management, GCP Billing APIs)
   - Audit logs (all operations executed)
   - Compliance reports (CIS benchmarks, policy violations)
-  - **Security scans** (public resources, encryption status, IAM analysis)
-  - **Idle resource detection** (unused instances, volumes, snapshots)
-  - **Performance monitoring** (resource utilization, bottlenecks)
-  - **Interactive morning report generation** (aggregated insights with AI-powered Q&A)
-- **Benefit**: Manager wakes up to fresh data and actionable morning report without manual refresh
+  - Security scans (public resources, encryption, IAM)
+  - Idle resource detection (unused instances, volumes, snapshots)
+  - Performance monitoring (resource utilization, bottlenecks)
+  - Interactive morning report generation (aggregated insights with Q&A)
+- **Benefit**: Manager wakes up to fresh data and actionable morning report
 - **Cost Optimization**: Single daily API call instead of repeated queries
 
-**Server-Side RAG (Escher AI Server):**
-- **Global Knowledge Base**: All cloud provider APIs, CLI commands, playbooks, best practices
-- **Purpose**: Provides cloud operations expertise and generates intelligent responses
-- **Updates**: Escher continuously updates with new cloud features, best practices, security advisories
+### **Server-Side RAG** (Escher AI Server)
 
-**Combined Power:**
-- Client RAG provides user-specific context (estate + immutable reports)
-- Server RAG provides cloud operations expertise
-- Together they enable intelligent, context-aware, multi-cloud operations
+```
+┌─────────────────────────────────────────────────────────────┐
+│             SERVER-SIDE RAG (GLOBAL KNOWLEDGE)              │
+├─────────────────────────────────────────────────────────────┤
+│  • All cloud provider APIs, CLI commands                    │
+│  • Playbooks for common operations                          │
+│  • Best practices and security advisories                   │
+│  • Multi-cloud equivalents and migration patterns           │
+│                                                             │
+│  Purpose: Provides cloud operations expertise              │
+│  Updates: Escher continuously updates with new features    │
+└─────────────────────────────────────────────────────────────┘
+```
 
----
+### **Combined Power**
+
+```
+Client RAG (User Context)  +  Server RAG (Cloud Expertise)
+        ↓                              ↓
+   Estate Inventory              Playbook Library
+   Chat History                  CLI Commands
+   Operations History            Best Practices
+   Immutable Reports             Multi-Cloud Knowledge
+   Alerts & Events               Security Advisories
+        ↓                              ↓
+        └──────────→ Intelligent, Context-Aware ←──────────┘
+                      Multi-Cloud Operations
+```
 
 ### **Version 2 Release: Central Immutable Reports**
 
-**Beta/V1 Release (Current):**
+**Beta/V1 Release (Current)**:
 - Immutable reports stored in user's control:
   - **Local Only**: Local vector store on physical laptop
   - **Extend My Laptop**: Vector store in S3/Blob/GCS (user's cloud)
 - Privacy-first: No reports leave user's environment
 
-**V2 Release (Future):**
+**V2 Release (Future)**:
 - **Optional**: User can choose to sync immutable reports to Escher-managed central location
 - **Benefits**:
-  - Cross-device access to reports (access from any device)
+  - Cross-device access to reports
   - Team collaboration on reports
   - Longer retention without user cloud costs
   - Advanced analytics across historical reports
@@ -1004,35 +1036,37 @@ Physical Laptop:
 
 ### **Privacy & Security Model**
 
-**What AI Server Receives:**
+**What AI Server Receives**:
 - ✅ Natural language queries
 - ✅ Cloud estate snapshots (for context - processed transiently, not stored)
 - ✅ Operation results (for generating recommendations - processed transiently)
 
-**What AI Server NEVER Receives:**
+**What AI Server NEVER Receives**:
 - ❌ Cloud credentials (AWS keys, Azure service principals, GCP service accounts)
 - ❌ Sensitive data from cloud resources (database contents, file contents, secrets)
 - ❌ User identity information
 
-**What AI Server NEVER Stores:**
+**What AI Server NEVER Stores**:
 - ❌ User data
 - ❌ Cloud estate information
 - ❌ Chat history
 - ❌ Operation history
 - ❌ Any user-specific state
 
-**Processing Model:**
+**Processing Model**:
 ```
 Request arrives → Load from RAG → Process with LLM → Generate response → Return → Forget everything
 ```
 
 Every request is independent. The AI Server has no memory between requests.
 
+[↑ Back to Top](#-table-of-contents)
+
 ---
 
 ## User Personas
 
-### 1. **Manager**
+### **1. Manager**
 - Reviews reports and analytics
 - Sets budgets and cost policies
 - Approves high-risk operations
@@ -1040,167 +1074,197 @@ Every request is independent. The AI Server has no memory between requests.
 - Monitors team activities
 - Manages compliance requirements
 
-### 2. **Executor** (Operations Engineer)
+### **2. Executor** (Operations Engineer)
 - Runs day-to-day operations conversationally
 - Follows organizational policies
 - Executes pre-approved playbooks
 - **"Extend Me" Pattern**: Executes operations within manager-defined boundaries
 
+[↑ Back to Top](#-table-of-contents)
+
 ---
 
 ## Cloud Management Operations
 
-### 1. **Resource Operations** (Day-to-day)
-- **Start/Stop/Restart** resources
-  - AWS: EC2, RDS, Lambda
-  - Azure: VMs, SQL Database, Functions
-  - GCP: Compute Engine, Cloud SQL, Cloud Functions
-- **Resize/Scale** resources (instance types, storage, compute)
-- **Create/Delete** resources
-- **Configure** resources (firewall rules, tags, settings)
-- **Backup/Restore** operations
-- **Snapshot management**
+### **Operation Categories**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  ESCHER CLOUD OPERATIONS                    │
+├─────────────────────────────────────────────────────────────┤
+│  1. Resource Operations      Day-to-day tasks               │
+│  2. Cost Management          Real-time cost analysis        │
+│  3. Reports & Analytics      Infrastructure, cost, security │
+│  4. Automation & Scheduling  Nightly shutdowns, backups     │
+│  5. Security & Compliance    Scanning, IAM, encryption      │
+│  6. Multi-Account Management Org-level visibility           │
+│  7. Collaboration & Workflows Approval, change tracking     │
+│  8. AI-Powered Operations    Conversational, smart          │
+│  9. Alerts & Monitoring      Real-time + scheduled          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### **1. Resource Operations** (Day-to-day)
+
+**Start/Stop/Restart** resources:
+- **AWS**: EC2, RDS, Lambda
+- **Azure**: VMs, SQL Database, Functions
+- **GCP**: Compute Engine, Cloud SQL, Cloud Functions
+
+**Other Operations**:
+- Resize/Scale (instance types, storage, compute)
+- Create/Delete resources
+- Configure (firewall rules, tags, settings)
+- Backup/Restore
+- Snapshot management
 
 **Execution**: Client-side with user credentials (cloud-specific SDKs/APIs)
 
 ---
 
-### 2. **Cost Management**
-- Real-time cost analysis (current spend, trends)
-- Budget tracking and alerts
-- Cost optimization recommendations (rightsizing, unused resources)
-- Resource utilization tracking
-- Reserved instance analysis
-- Savings plan recommendations
-- Waste detection (idle resources, unattached volumes)
+### **2. Cost Management**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  • Real-time cost analysis (current spend, trends)          │
+│  • Budget tracking and alerts                               │
+│  • Cost optimization recommendations (rightsizing, unused)  │
+│  • Resource utilization tracking                            │
+│  • Reserved instance analysis                               │
+│  • Savings plan recommendations                             │
+│  • Waste detection (idle resources, unattached volumes)     │
+└─────────────────────────────────────────────────────────────┘
+```
 
 **Implementation**:
-- Historical cost data stored in immutable reports collection (vector store)
+- Historical cost data stored in immutable reports collection
 - Daily snapshots from AWS Cost Explorer, Azure Cost Management, GCP Billing APIs
 - Budget alerts: Periodic (evaluated during daily sync, default 2am)
 
 ---
 
-### 3. **Reports & Analytics**
-- **Infrastructure Reports**: Inventory, configuration, topology
-- **Cost Reports**: By service, account, region, tag
-- **Security Reports**: Vulnerabilities, policy violations, compliance
-- **Performance Reports**: Resource utilization, bottlenecks
-- **Change History**: Audit trail of operations
-- **Compliance Reports**: CIS benchmarks, custom policies
+### **3. Reports & Analytics**
+
+| Report Type | Contents |
+|---|---|
+| **Infrastructure** | Inventory, configuration, topology |
+| **Cost** | By service, account, region, tag |
+| **Security** | Vulnerabilities, policy violations, compliance |
+| **Performance** | Resource utilization, bottlenecks |
+| **Change History** | Audit trail of operations |
+| **Compliance** | CIS benchmarks, custom policies |
 
 **Implementation**:
-- **Generation**: Both on-demand (user requests) and scheduled (daily sync at 2am)
+- **Generation**: On-demand (user requests) and scheduled (daily sync at 2am)
 - **Storage**: Immutable reports collection in vector store (local or S3/Blob/GCS)
 - **Export Formats**: PDF, CSV, Excel, JSON (AI generates in requested format)
 - **Retention Policy**: User-configurable (default: 90 days for cost, 1 year for audit logs)
 
 ---
 
-### 4. **Automation & Scheduling**
-- **Scheduled Operations**: Nightly shutdowns, weekend starts, periodic tasks
-- **Automated Remediation**: Auto-stop idle instances, delete old snapshots
-- **Backup Schedules**: Automated backup execution
-- **Compliance Enforcement**: Auto-tag resources, enforce encryption
-- **Cost Optimization**: Automated cleanup of waste
+### **4. Automation & Scheduling**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  • Scheduled Operations (nightly shutdowns, weekend starts) │
+│  • Automated Remediation (auto-stop idle, delete snapshots) │
+│  • Backup Schedules (automated backup execution)            │
+│  • Compliance Enforcement (auto-tag, enforce encryption)    │
+│  • Cost Optimization (automated cleanup of waste)           │
+└─────────────────────────────────────────────────────────────┘
+```
 
 **Implementation**:
-- **Local Only**: Physical laptop must be online for scheduled operations (local cron/scheduler)
-- **Extend My Laptop**: Cloud schedulers (EventBridge/Logic Apps/Cloud Scheduler) trigger Extend My Laptop
-- **Event-Driven**: EventBridge Events, Azure Event Grid, Cloud Pub/Sub trigger automated remediation
+- **Local Only**: Physical laptop must be online (local cron/scheduler)
+- **Extend My Laptop**: Cloud schedulers (EventBridge/Logic Apps/Cloud Scheduler)
+- **Event-Driven**: EventBridge Events, Azure Event Grid, Cloud Pub/Sub trigger auto-remediation
 - **No AssumeRole needed**: Extend My Laptop uses credentials installed in SSM/Key Vault/Secret Manager
 
 ---
 
-### 5. **Security & Compliance**
-- **Security Scanning**: Misconfigurations, vulnerabilities, exposed resources
-- **Compliance Checks**: CIS benchmarks, SOC2, HIPAA, custom policies
-- **IAM Analysis**: Overprivileged roles, unused credentials, permission boundaries
-- **Encryption Validation**: S3, EBS, RDS encryption status
-- **Network Security**: Open ports, public resources, security group rules
-- **Continuous Monitoring**: Real-time security posture
+### **5. Security & Compliance**
 
-**Key Questions**:
-- [ ] Continuous monitoring or on-demand scans?
-- [ ] Alert delivery: In-app, email, Slack, PagerDuty?
-- [ ] Remediation: Manual or automated?
-
----
-
-### 6. **Multi-Account/Subscription/Project Management**
-- **Org-Level Visibility**: All cloud accounts/subscriptions/projects in unified view
-  - AWS: Organizations, Accounts
-  - Azure: Management Groups, Subscriptions
-  - GCP: Organizations, Projects
-- **Cross-Account Operations**: Batch operations across cloud boundaries
-- **Consolidated Reporting**: Org-wide costs, compliance, security across all clouds
-- **Centralized Policy Enforcement**: Consistent policies across all cloud providers
-- **Account Governance**: Account/subscription/project creation, access management
-
-**Key Questions**:
-- [ ] How many accounts per customer typically?
-- [ ] Role-based access control per account/cloud?
-- [ ] Cross-account assume role patterns (AWS), Service Principals (Azure), Service Accounts (GCP)?
+```
+┌─────────────────────────────────────────────────────────────┐
+│  • Security Scanning (misconfigurations, vulnerabilities)   │
+│  • Compliance Checks (CIS, SOC2, HIPAA, custom policies)    │
+│  • IAM Analysis (overprivileged roles, unused credentials)  │
+│  • Encryption Validation (S3, EBS, RDS encryption status)   │
+│  • Network Security (open ports, public resources)          │
+│  • Continuous Monitoring (real-time security posture)       │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-### 7. **Collaboration & Approval Workflows**
-- **Operation Approval**: Manager approves before Executor runs (for high-risk ops)
-- **Change Tracking**: Audit log of all operations
-- **Team Permissions**: Role-based access control (RBAC)
-- **Notification System**: Alert team about operations, changes, issues
-- **Commenting**: Team discussion on operations/reports
+### **6. Multi-Account/Subscription/Project Management**
 
-**Key Questions**:
-- [ ] Approval workflow: Client-side or server-side?
-- [ ] Real-time collaboration needed?
-- [ ] Notification channels: In-app, email, Slack?
+**Org-Level Visibility**:
+- **AWS**: Organizations, Accounts
+- **Azure**: Management Groups, Subscriptions
+- **GCP**: Organizations, Projects
+
+**Features**:
+- Cross-Account Operations: Batch operations across cloud boundaries
+- Consolidated Reporting: Org-wide costs, compliance, security
+- Centralized Policy Enforcement: Consistent policies across all clouds
+- Account Governance: Account/subscription/project creation, access management
 
 ---
 
-### 8. **AI-Powered Operations**
-- **Conversational Queries**:
-  - "What's my biggest cost driver across all clouds?"
-  - "Show me all public storage buckets" (S3, Blob Storage, Cloud Storage)
-  - "Which VMs are underutilized?"
-- **Smart Recommendations**: AI suggests cloud-specific optimizations
-- **Anomaly Detection**: Unusual spending, security events, performance issues across all clouds
-- **Playbook Generation**: AI creates multi-step, multi-cloud operation plans
-- **Natural Language Execution**:
+### **7. Collaboration & Approval Workflows**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  • Operation Approval (Manager approves high-risk ops)      │
+│  • Change Tracking (Audit log of all operations)            │
+│  • Team Permissions (Role-based access control)             │
+│  • Notification System (Alert team about ops, changes)      │
+│  • Commenting (Team discussion on operations/reports)       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### **8. AI-Powered Operations**
+
+**Conversational Queries**:
+- "What's my biggest cost driver across all clouds?"
+- "Show me all public storage buckets" (S3, Blob Storage, Cloud Storage)
+- "Which VMs are underutilized?"
+
+**Features**:
+- Smart Recommendations: AI suggests cloud-specific optimizations
+- Anomaly Detection: Unusual spending, security events, performance issues
+- Playbook Generation: AI creates multi-step, multi-cloud operation plans
+- Natural Language Execution:
   - "Stop all dev VMs in Azure West US"
   - "Enable encryption on all GCP buckets in project X"
-- **Context-Aware Responses**: Understands user's complete multi-cloud estate
-
-**Current**: Server-side AI with client-side context enrichment
+- Context-Aware Responses: Understands user's complete multi-cloud estate
 
 ---
 
-### 9. **Alerts & Monitoring**
+### **9. Alerts & Monitoring**
+
+See [Alert & Event Handling Architecture](#alert--event-handling-architecture) section above for complete details.
 
 **Real-Time Operational Alerts** (🚨 Can't Wait):
-- Critical event detection (production outages, security breaches, budget overruns)
-- Cloud-native alert sources (CloudWatch, Azure Monitor, GCP Monitoring)
-- Escher listener added to source of truth (EventBridge/Event Grid/Pub Sub)
-- Auto-remediation with pre-approved first aid options (configured during installation)
-- Multi-channel notifications (email, SMS, Slack, PagerDuty) via cloud-native services
-- Severity-based routing (Critical → immediate, High → email, Medium → in-app, Info → morning report)
-- Unified event schema for cross-cloud normalization
+- Critical event detection
+- Cloud-native alert sources
+- Auto-remediation with pre-approved options
+- Multi-channel notifications
+- Severity-based routing
+- Unified event schema
 
 **Scheduled Scan Alerts** (ℹ️ Can Wait - Morning Report):
-- Daily proactive scans (cost, security, optimization, operational health)
-- Interactive morning report (better than email - ask questions on report)
-- AI-powered aggregation and prioritization
-- Template-based customization (default provided, user can modify)
+- Daily proactive scans
+- Interactive morning report
+- AI-powered aggregation
+- Template-based customization
 - Actionable recommendations with 1-click fixes
-- Permanent storage in vector store for historical queries and comparisons
+- Permanent storage for historical queries
 
-**Implementation**:
-- **Real-Time**: Event subscriptions at source (EventBridge/Event Grid/Pub Sub) → Extend My Laptop
-- **Scheduled**: Daily scans at 2am (configurable), results in morning report
-- **Storage**: Alerts & Events collection in RAG (alert rules, history, templates, morning reports)
-- **Notification**: Cloud-native services (SNS, Notification Hubs, Cloud Messaging)
-- **Auto-remediation**: Pre-approved during installation, modifiable in settings
-- **Local Only Limitation**: Requires laptop always-on for real-time alerts
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
@@ -1219,19 +1283,19 @@ Every request is independent. The AI Server has no memory between requests.
 #### 3. Scheduled Operations (Automated)
 - ✅ **DECIDED**:
   - **Local Only**: Physical laptop must be online (local cron/scheduler)
-  - **Extend My Laptop**: Cloud scheduler (EventBridge/Logic Apps/Cloud Scheduler) triggers Extend My Laptop
+  - **Extend My Laptop**: Cloud scheduler triggers Extend My Laptop
   - User chooses model based on requirements
 
 #### 4. State & Credentials Storage
 - ✅ **DECIDED**:
-  - **Local Only**: Stored on physical laptop + periodic backups to S3/Blob/GCS (hourly, configurable)
+  - **Local Only**: Stored on physical laptop + periodic backups to S3/Blob/GCS (hourly)
   - **Extend My Laptop**: Stored in user's cloud (S3/Blob/GCS for state, SSM/Key Vault/Secret Manager for credentials)
   - **Escher AI Server**: 100% stateless, stores nothing
 
 #### 5. Continuous Monitoring & Automated Remediation
 - ✅ **DECIDED**:
   - **Local Only**: Limited to when laptop online
-  - **Extend My Laptop**: Event-driven via cloud schedulers (EventBridge Events, Azure Event Grid, Cloud Pub/Sub)
+  - **Extend My Laptop**: Event-driven via cloud schedulers
 
 ---
 
@@ -1242,33 +1306,31 @@ Every request is independent. The AI Server has no memory between requests.
   - **Local Only**: Local vector store on laptop
   - **Extend My Laptop**: Vector store in S3/Blob/GCS (user's cloud)
   - **V2 Release**: Optional central immutable reports (opt-in)
-  - Retention policy: User-configurable (default recommendations: 90 days for cost, 1 year for audit logs)
+  - Retention policy: User-configurable (default: 90 days for cost, 1 year for audit)
 
 #### 2. Cost Data Collection
 - ✅ **DECIDED**: Daily snapshots to avoid repeated API calls
   - Direct API calls to AWS Cost Explorer, Azure Cost Management, GCP Billing APIs
-  - **Daily sync** scheduled (default 2am, user-configurable)
-  - Stored in immutable reports vector store for historical analysis
-  - **Cost optimization**: Single daily API call instead of repeated queries
-  - Manager persona gets fresh data automatically every morning
+  - Daily sync scheduled (default 2am, user-configurable)
+  - Stored in immutable reports vector store
+  - Cost optimization: Single daily API call instead of repeated queries
+  - Manager gets fresh data automatically every morning
 
 #### 3. Audit Logs
 - ✅ **DECIDED**: Immutable audit logs in vector store
   - Cannot be modified after creation (compliance requirement)
   - Daily sync ensures complete audit trail
   - Fast retrieval via vector store for AI analysis
-  - Manager persona has complete audit trail updated daily
 
 #### 4. Report Generation
 - ✅ **DECIDED**: Both on-demand and scheduled
   - On-demand: User requests via conversational interface
   - Scheduled: Daily sync for cost/audit logs
-  - Export formats: PDF, CSV, Excel, JSON (AI generates in requested format)
-  - ❓ **OPEN**: Email delivery option?
+  - Export formats: PDF, CSV, Excel, JSON
 
 ---
 
-### 🟢 **Moderate - Collaboration & RBAC**
+### 🟡 **Moderate - Collaboration & RBAC**
 
 #### 1. Multi-Account/Subscription/Project Access
 - ❓ **OPEN**: How managed?
@@ -1284,11 +1346,13 @@ Every request is independent. The AI Server has no memory between requests.
 
 #### 3. Audit Trail
 - ✅ **DECIDED**: Immutable audit logs in vector store
-  - **All operations logged**: In immutable reports collection (vector store)
-  - **Storage**: Local (Local Only) or S3/Blob/GCS (Extend My Laptop)
-  - **Immutable**: Cannot be modified after creation (compliance requirement)
-  - **Daily sync**: Ensures complete audit trail updated daily at 2am
-  - **Retention**: User-configurable (default: 1 year for audit logs)
+  - All operations logged in immutable reports collection
+  - Storage: Local (Local Only) or S3/Blob/GCS (Extend My Laptop)
+  - Immutable: Cannot be modified after creation
+  - Daily sync at 2am
+  - Retention: User-configurable (default: 1 year)
+
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
@@ -1306,22 +1370,24 @@ Every request is independent. The AI Server has no memory between requests.
 - [ ] Approval workflow for template creation?
 - [ ] Audit trail for "extend me" executions?
 
+[↑ Back to Top](#-table-of-contents)
+
 ---
 
 ## Next Steps - Architecture Discussion
 
 ### ✅ Phase 1: Define Execution Model (COMPLETE)
-1. ✅ Decided on two deployment models (Local Only vs Extend My Laptop)
-2. ✅ Defined scheduled operations execution (local scheduler vs cloud scheduler)
-3. ✅ Clarified privacy model (Escher AI Server 100% stateless, state in user's control)
-4. ✅ Defined Extend My Laptop provisioning (Escher provisions in user's account with user's credentials)
+1. ✅ Decided on two deployment models
+2. ✅ Defined scheduled operations execution
+3. ✅ Clarified privacy model (AI Server 100% stateless)
+4. ✅ Defined Extend My Laptop provisioning
 
 ### ✅ Phase 2: Define Data Architecture (COMPLETE)
-1. ✅ Historical data retention strategy (vector store with immutable reports collection)
-2. ✅ Reports generation and storage model (on-demand + scheduled, stored in vector store)
-3. ✅ Cost data collection and aggregation approach (daily snapshots to vector store)
-4. ✅ Export formats (PDF, CSV, Excel, JSON via AI generation)
-5. ✅ Daily sync for Manager persona (cost + audit logs at 2am)
+1. ✅ Historical data retention strategy
+2. ✅ Reports generation and storage model
+3. ✅ Cost data collection and aggregation
+4. ✅ Export formats
+5. ✅ Daily sync for Manager persona
 
 ### ⏳ Phase 3: Define Personas & RBAC (PENDING)
 1. Complete persona definitions (Manager, Executor, others?)
@@ -1337,40 +1403,66 @@ Every request is independent. The AI Server has no memory between requests.
 4. Automation boundaries
 5. Multi-account/subscription/project patterns
 
+[↑ Back to Top](#-table-of-contents)
+
 ---
 
 ## Alignment Check
 
 ### ✅ **Fully Aligned & Documented**
-- Multi-cloud platform (AWS, Azure, GCP) with conversational interface
-- Two deployment models (Local Only and Extend My Laptop) based on user needs
-- State and execution in user's control (local or user's cloud)
-- Escher AI Server 100% stateless (no user data, credentials, or state)
-- Extend My Laptop provisioned in user's account with user's credentials
-- Scheduled operations via cloud schedulers (EventBridge/Logic Apps/Cloud Scheduler)
-- Multi-cloud management from single Extend My Laptop
-- Rust execution engine for operations (playbooks, CLI commands, shell scripts)
-- **Immutable reports in vector store** (cost, audit logs, compliance)
-- **Daily sync for Manager persona** (cost + audit logs + security scans + morning report at 2am)
-- **Client-side RAG** with 5 collections (estate, chat, operations, immutable reports, **alerts & events**)
-- **Server-side RAG** with playbook library and cloud operations knowledge
-- **V2 release plan** for optional central immutable reports
-- **Alert & Event Handling**:
-  - Real-time operational alerts (Escher listener at source, auto-remediation, cloud-native notifications)
-  - Scheduled scan alerts (daily scans, interactive morning report with AI-powered Q&A)
-  - Unified event schema for cross-cloud normalization
-  - Permanent storage in vector store for historical analysis
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   WHAT'S DECIDED ✅                          │
+├─────────────────────────────────────────────────────────────┤
+│  • Multi-cloud platform (AWS, Azure, GCP)                   │
+│  • Two deployment models (Local Only, Extend My Laptop)     │
+│  • State and execution in user's control                    │
+│  • Escher AI Server 100% stateless                          │
+│  • Extend My Laptop provisioned in user's account           │
+│  • Scheduled operations via cloud schedulers                │
+│  • Multi-cloud management from single Extend My Laptop      │
+│  • Rust execution engine for operations                     │
+│  • Immutable reports in vector store                        │
+│  • Daily sync for Manager persona (2am)                     │
+│  • Client-side RAG (5 collections)                          │
+│  • Server-side RAG (playbook library, cloud knowledge)      │
+│  • V2 release plan (optional central immutable reports)     │
+│  • Alert & Event Handling:                                  │
+│    - Real-time operational alerts                           │
+│    - Scheduled scan alerts (morning report)                 │
+│    - Unified event schema                                   │
+│    - Permanent storage in vector store                      │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### 🟡 **Partially Defined - Need Details**
-- Multi-account/subscription/project credential management
-- Collaboration and approval workflows
-- "Extend me" pattern implementation
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                NEEDS MORE DETAILS 🟡                         │
+├─────────────────────────────────────────────────────────────┤
+│  • Multi-account/subscription/project credential management │
+│  • Collaboration and approval workflows                     │
+│  • "Extend me" pattern implementation                       │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### ❌ **Not Yet Documented**
-- Complete list of supported cloud operations by category
-- Personas & RBAC model details
-- Budget management features
-- Notification and alerting mechanisms (email delivery, Slack, PagerDuty)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    TODO ❌                                   │
+├─────────────────────────────────────────────────────────────┤
+│  • Complete list of supported cloud operations by category  │
+│  • Personas & RBAC model details                            │
+│  • Budget management features                               │
+│  • Notification and alerting mechanisms                     │
+│    (email delivery, Slack, PagerDuty)                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+[↑ Back to Top](#-table-of-contents)
 
 ---
 
