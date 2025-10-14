@@ -11,12 +11,12 @@
 ### 🎯 **QUICK START** (Read These First)
 1. [Critical Architecture Principle](#-critical-architecture-principle) - Our #1 non-negotiable
 2. [Product Overview](#product-overview) - What is Escher?
-3. [Deployment Models](#deployment-architecture) - Local Only vs Extend My Laptop
+3. [Where Does Escher Run?](#where-does-escher-run) - Choose your setup
 
 ### 🏗️ **CORE ARCHITECTURE**
-4. [Deployment Architecture](#deployment-architecture) - How Escher runs
-   - [Model 1: Local Only](#model-1-local-only-beta--lightweight-users)
-   - [Model 2: Extend My Laptop](#model-2-extend-my-laptop-main-release--power-users)
+4. [Where Does Escher Run?](#where-does-escher-run) - Two private options
+   - [Option 1: Run on Your Laptop](#option-1-run-on-your-laptop-beta--lightweight-users)
+   - [Option 2: Extend to Your Cloud](#option-2-extend-to-your-cloud-main-release--power-users)
 5. [Alert & Event System](#alert--event-handling-architecture) - Real-time + Scheduled
    - [Real-Time Operational Alerts](#1-real-time-operational-alerts--cant-wait---immediate-action-required)
    - [Scheduled Scan Alerts (Morning Report)](#2-scheduled-scan-alerts--can-wait---interactive-morning-report)
@@ -65,7 +65,7 @@ Whether user chooses **Local Only** or **Extend My Laptop** deployment:
 ### Core Philosophy
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────���───┐
 │  🌐 Multi-Cloud Support    Single platform for AWS/Azure/GCP │
 │  💬 Conversational         Natural language for all ops      │
 │  🎯 Unified Experience     Consistent across clouds          │
@@ -79,25 +79,52 @@ Whether user chooses **Local Only** or **Extend My Laptop** deployment:
 
 ---
 
-## Deployment Architecture
+## Where Does Escher Run?
 
-Escher offers **two deployment models** to meet different user needs:
+Escher offers **two ways to run** - both are **100% private** with your data in YOUR control:
+
+### **🔒 Privacy Parity - Both Options Are Equally Private**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│         BOTH OPTIONS: YOUR DATA STAYS WITH YOU              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Option 1: Run on Your Laptop                              │
+│  🔒 Primary Storage: Your Laptop (Vector Store)            │
+│  🔒 Backup: YOUR S3/Blob/GCS (disaster recovery)           │
+│  🔒 Data Owner: YOU                                        │
+│                                                             │
+│  Option 2: Extend to Your Cloud                            │
+│  🔒 Primary Storage: YOUR S3/Blob/GCS (Vector Store)       │
+│  🔒 Also Acts As: Backup (cloud-native durability)         │
+│  🔒 Data Owner: YOU (not Escher!)                          │
+│                                                             │
+│  IN BOTH CASES:                                            │
+│  ✅ Escher AI Server stores NOTHING                        │
+│  ✅ Your credentials stay with YOU                         │
+│  ✅ Zero trust architecture                                │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### **Quick Comparison**
 
-| Feature | Local Only (Beta) | Extend My Laptop (Main) |
+| Feature | Run on Your Laptop | Extend to Your Cloud |
 |---|---|---|
+| **Privacy** | 🔒 100% Private | 🔒 100% Private (YOUR cloud) |
+| **Primary Storage** | Laptop Vector Store | YOUR S3/Blob/GCS Vector Store |
+| **S3/Blob/GCS Role** | Backup only | Primary storage + backup |
 | **Target Users** | Individuals, simple ops | Teams, 24/7 requirements |
 | **Laptop Requirement** | Must stay online | Can be offline |
 | **Real-Time Alerts** | ❌ Requires always-on laptop | ✅ Works 24/7 |
 | **Scheduled Jobs** | ❌ Laptop must be online | ✅ Runs in cloud reliably |
-| **Cloud Costs** | $0 compute (only storage) | EventBridge + Fargate + S3 |
+| **Cloud Costs** | $0 compute (only backup storage) | EventBridge + Fargate + S3 |
 | **Setup Complexity** | Simple | Moderate |
 | **Best For** | Exploration, dev work | Production, automation |
 
 ---
 
-### **Model 1: Local Only** (Beta / Lightweight Users)
+### **Option 1: Run on Your Laptop** (Beta / Lightweight Users)
 
 #### Architecture Diagram
 ```
@@ -128,7 +155,7 @@ User Query → Physical Laptop searches RAG → Sends query + context to AI Serv
 
 ---
 
-### **Model 2: Extend My Laptop** (Main Release / Power Users)
+### **Option 2: Extend to Your Cloud** (Main Release / Power Users)
 
 #### Architecture Diagram
 ```
