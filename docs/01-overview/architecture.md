@@ -1,757 +1,416 @@
-# AWS CloudOps AI Agent - Architecture with Tauri + Local AWS Estate
+# Escher - Multi-Cloud Operations Architecture
 
 ## **Updated Architecture Overview**
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                    CLIENT (Tauri App)                            │
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  Frontend (React/Vue/Svelte)                           │    │
-│  │  • Chat UI                                             │    │
-│  │  • Resource Explorer                                   │    │
-│  │  • Execution Monitor                                   │    │
-│  └────────────────────────────────────────────────────────┘    │
-│                          ↕                                      │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  Rust Backend (Tauri Core)                            │    │
-│  │  • Request Builder                                     │    │
-│  │  • Resource Lookup Engine                             │    │
-│  │  • AWS CLI Executor                                   │    │
-│  │  • Workflow Engine                                     │    │
-│  └────────────────────────────────────────────────────────┘    │
-│                          ↕                                      │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  LOCAL STORAGE LAYER                                   │    │
-│  │                                                         │    │
-│  │  ┌──────────────────┐  ┌──────────────────────────┐  │    │
-│  │  │ Qdrant           │  │ AWS Estate Cache         │  │    │
-│  │  │ (Vector DB)      │  │                          │  │    │
-│  │  │                  │  │ Resources:               │  │    │
-│  │  │ • Resource       │  │ • EC2: 2,500 instances  │  │    │
-│  │  │   embeddings     │  │ • RDS: 150 databases    │  │    │
-│  │  │ • Semantic       │  │ • S3: 430 buckets       │  │    │
-│  │  │   search         │  │ • Lambda: 85 functions  │  │    │
-│  │  │ • Fast lookup    │  │ • ELB: 22 balancers     │  │    │
-│  │  │                  │  │                          │  │    │
-│  │  │ Indexed:         │  │ Metadata per resource:  │  │    │
-│  │  │ • Names          │  │ • ID, name, type        │  │    │
-│  │  │ • Tags           │  │ • Account, region       │  │    │
-│  │  │ • Descriptions   │  │ • State, config         │  │    │
-│  │  │ • Resource IDs   │  │ • Tags, labels          │  │    │
-│  │  └──────────────────┘  │ • Permissions           │  │    │
-│  │                        │ • Dependencies          │  │    │
-│  │                        │ • Last updated          │  │    │
-│  │                        └──────────────────────────┘  │    │
-│  └────────────────────────────────────────────────────────┘    │
-│                          ↕                                      │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  AWS Credentials (Secure Storage)                      │    │
-│  │  • OS Keychain                                         │    │
-│  │  • Multiple AWS accounts                               │    │
-│  │  • Never sent to server                                │    │
-│  └────────────────────────────────────────────────────────┘    │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                  CLIENT (Tauri Desktop App)                          │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────┐    │
+│  │  Frontend (React + TypeScript)                             │    │
+│  │  • Multi-Cloud Chat UI (AWS/Azure/GCP)                     │    │
+│  │  • Resource Explorer (unified view)                        │    │
+│  │  • Execution Monitor                                       │    │
+│  │  • Alert Dashboard                                         │    │
+│  │  • Cost Dashboard                                          │    │
+│  │  • Morning Report                                          │    │
+│  └────────────────────────────────────────────────────────────┘    │
+│                          ↕                                          │
+│  ┌────────────────────────────────────────────────────────────┐    │
+│  │  Rust Backend (Tauri Core)                                │    │
+│  │  • Request Builder                                         │    │
+│  │  • Resource Lookup Engine                                 │    │
+│  │  • Multi-Cloud CLI/SDK Executor                           │    │
+│  │    - AWS CLI/SDK                                          │    │
+│  │    - Azure CLI/SDK                                        │    │
+│  │    - GCP gcloud/SDK                                       │    │
+│  │  • Workflow & Playbook Engine                             │    │
+│  └────────────────────────────────────────────────────────────┘    │
+│                          ↕                                          │
+│  ┌────────────────────────────────────────────────────────────┐    │
+│  │  LOCAL STORAGE LAYER (Vector Store)                       │    │
+│  │                                                            │    │
+│  │  ┌──────────────────┐  ┌──────────────────────────────┐  │    │
+│  │  │ Qdrant           │  │ 5 RAG Collections:           │  │    │
+│  │  │ (Vector DB)      │  │                              │  │    │
+│  │  │                  │  │ 1. Cloud Estate Inventory    │  │    │
+│  │  │ Multi-Cloud      │  │    AWS, Azure, GCP resources │  │    │
+│  │  │ Semantic Search  │  │                              │  │    │
+│  │  │                  │  │ 2. Chat History              │  │    │
+│  │  │ • Resource       │  │    Conversational history    │  │    │
+│  │  │   embeddings     │  │                              │  │    │
+│  │  │ • Fast lookup    │  │ 3. Executed Operations       │  │    │
+│  │  │ • Fuzzy matching │  │    History of operations     │  │    │
+│  │  │                  │  │                              │  │    │
+│  │  │ Unified Index:   │  │ 4. Immutable Reports         │  │    │
+│  │  │ • Names, Tags    │  │    Cost, audit, compliance   │  │    │
+│  │  │ • Cloud Provider │  │                              │  │    │
+│  │  │ • Resource Type  │  │ 5. Alerts & Events           │  │    │
+│  │  │ • IDs, ARNs      │  │    Alert rules, history,     │  │    │
+│  │  │                  │  │    morning reports           │  │    │
+│  │  └──────────────────┘  └──────────────────────────────┘  │    │
+│  └────────────────────────────────────────────────────────────┘    │
+│                          ↕                                          │
+│  ┌────────────────────────────────────────────────────────────┐    │
+│  │  Multi-Cloud Credentials (Secure Storage)                 │    │
+│  │  • OS Keychain (macOS/Windows/Linux)                      │    │
+│  │  • AWS: Access Keys, Session Tokens                       │    │
+│  │  • Azure: Service Principals, Managed Identity            │    │
+│  │  • GCP: Service Account Keys                              │    │
+│  │  • Never sent to server                                   │    │
+│  └────────────────────────────────────────────────────────────┘    │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
                               ↕
                          HTTPS/REST
                               ↕
-┌──────────────────────────────────────────────────────────────────┐
-│                         SERVER                                   │
-├──────────────────────────────────────────────────────────────────┤
-│  • Classification Agent + RAG                                    │
-│  • AWS Operations Agent                                          │
-│  • Playbook Repository (Git)                                     │
-│  • Metadata Database (Redis)                                │
-│  • Global Vector DB (Qdent) - for playbooks                  │
-│  • NO AWS credentials                                            │
-│  • NO AWS estate data stored                                     │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                    ESCHER AI SERVER (Stateless)                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  • Multi-Agent System                                                │
+│    - Classification Agent                                            │
+│    - Multi-Cloud Operations Agent (AWS/Azure/GCP)                    │
+│    - Risk Assessment Agent                                           │
+│  • Global RAG Knowledge Base                                         │
+│    - Playbook Library (AWS, Azure, GCP operations)                   │
+│    - CLI Command Database (complete multi-cloud reference)           │
+│    - Best Practices (architecture, security, cost)                   │
+│    - Multi-Cloud Equivalents (AWS ↔ Azure ↔ GCP mappings)           │
+│  • Stateless Processing                                              │
+│    - NO user data storage                                            │
+│    - NO cloud credentials                                            │
+│    - NO cloud estate data                                            │
+│    - Processes requests → Returns responses → Forgets everything     │
+└──────────────────────────────────────────────────────────────────────┘
+                              ↕
+                     (Optional - User's Cloud)
+                              ↕
+┌──────────────────────────────────────────────────────────────────────┐
+│              EXTENDED RUNTIME (User's Cloud Account)                 │
+├──────────────────────────────────────────────────────────────────────┤
+│  • Cloud Scheduler (EventBridge/Logic Apps/Cloud Scheduler)          │
+│  • Container Execution (Fargate/Container Instances/Cloud Run)       │
+│  • Vector Store in S3/Blob Storage/Cloud Storage                     │
+│  • Credentials in SSM Parameter Store/Key Vault/Secret Manager       │
+│  • Event-Based Lifecycle (starts on-demand, stops when idle)         │
+│  • Manages ALL clouds from single location (AWS + Azure + GCP)       │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## **Key Architecture Changes**
+## **Key Architecture Principles**
 
-### **1. Tauri Benefits**
+### **1. Client-Side Data Ownership**
+
+**Philosophy**: User's cloud estate, credentials, and operational history stay in USER'S control.
+
+| What Stays Local/User Cloud | What Goes to Escher Server |
+|---|---|
+| ✅ Cloud Estate Inventory | ✅ Natural language queries |
+| ✅ Cloud Credentials | ✅ Context for AI processing |
+| ✅ Chat History | ❌ No user data storage |
+| ✅ Executed Operations | ❌ No credentials |
+| ✅ Cost Reports | ❌ No estate data |
+| ✅ Alerts & Events | ❌ Stateless - forgets after response |
+
+**Benefits**:
+- **Privacy**: Your infrastructure details never stored externally
+- **Security**: Credentials never leave your environment
+- **Control**: You own all operational data
+- **Compliance**: Meets strictest data residency requirements
+
+---
+
+### **2. Stateless AI Server**
+
+**Critical Design Decision**: Escher AI Server stores NOTHING about users.
+
+```
+Request Flow:
+┌────────────────────────────────────────────────────────────┐
+│ Client Query + Context → AI Server                         │
+│   ↓                                                         │
+│ AI Server processes with Global RAG                        │
+│   ↓                                                         │
+│ AI Server returns structured response                      │
+│   ↓                                                         │
+│ AI Server FORGETS EVERYTHING                               │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Why Stateless?**
+- **Privacy Guarantee**: No user data persistence
+- **Scalability**: Horizontal scaling without state management
+- **Security**: Zero attack surface for user data theft
+- **Simplicity**: No database, no backups, no state synchronization
+
+---
+
+### **3. Multi-Cloud Unified Architecture**
+
+**Single Interface for AWS, Azure, and GCP**
+
+```
+User Query: "Show me all running VMs"
+    ↓
+Escher Client searches unified cloud_estate collection
+    ↓
+Results include:
+  - AWS EC2 instances
+  - Azure Virtual Machines
+  - GCP Compute Engine instances
+    ↓
+Display in unified table with cloud provider column
+```
+
+**Multi-Cloud Resource Normalization**:
+
+| Cloud Provider | Resource Type | Normalized Name |
+|---|---|---|
+| AWS | EC2 Instance | compute_instance |
+| Azure | Virtual Machine | compute_instance |
+| GCP | Compute Engine VM | compute_instance |
+| AWS | RDS Database | database_instance |
+| Azure | SQL Database | database_instance |
+| GCP | Cloud SQL | database_instance |
+| AWS | S3 Bucket | object_storage |
+| Azure | Blob Storage | object_storage |
+| GCP | Cloud Storage | object_storage |
+
+---
+
+### **4. Vector Store Architecture (5 Collections)**
+
+**Purpose**: Fast semantic search across multi-cloud resources
+
+#### **Collection 1: Cloud Estate Inventory**
+```typescript
+{
+  id: "aws-123456789012-us-west-2-i-abc123",
+  vector: [0.123, 0.456, ...], // Embedding
+  payload: {
+    cloud_provider: "aws" | "azure" | "gcp",
+    resource_type: "compute_instance",
+    account_id: "123456789012",
+    region: "us-west-2",
+    state: "running",
+    tags: { env: "production", app: "main" },
+    encrypted_data: "..." // Full metadata + permissions
+  }
+}
+```
+
+**Enables**:
+- "show production database" → searches across AWS RDS, Azure SQL, GCP Cloud SQL
+- "idle VMs in dev" → finds underutilized compute across all clouds
+- "unencrypted storage" → searches S3, Blob Storage, Cloud Storage
+
+#### **Collection 2: Chat History**
+- Conversational history with AI
+- Context for follow-up questions
+- Append-only, no embeddings (dummy vectors)
+
+#### **Collection 3: Executed Operations**
+- History of all operations executed
+- Audit trail for compliance
+- Playbook execution logs
+
+#### **Collection 4: Immutable Reports**
+- Cost reports (daily snapshots from AWS Cost Explorer, Azure Cost Management, GCP Billing)
+- Audit logs (immutable, cannot be modified)
+- Compliance reports (CIS benchmarks, policy violations)
+- **Purpose**: Avoid repeated API calls, enable fast historical analysis
+
+#### **Collection 5: Alerts & Events**
+- Alert rules and thresholds
+- Alert history (real-time + scheduled scan alerts)
+- Morning report data
+- Auto-remediation settings
+
+**Storage Location**:
+- **Run on Laptop**: Local Qdrant + hourly backups to YOUR S3/Blob/GCS
+- **Extend to Cloud**: Primary storage in YOUR S3/Blob/GCS (cloud-native durability)
+
+---
+
+### **5. Extended Runtime Architecture**
+
+**Optional**: User can extend Escher to run 24/7 in THEIR cloud account.
+
+**Components Provisioned in User's Cloud**:
+
+| Cloud | Scheduler | Execution | State Storage | Credentials |
+|---|---|---|---|---|
+| AWS | EventBridge | Fargate | S3 | SSM Parameter Store |
+| Azure | Logic Apps | Container Instances | Blob Storage | Key Vault |
+| GCP | Cloud Scheduler | Cloud Run | Cloud Storage | Secret Manager |
+
+**Use Cases**:
+- **Scheduled Jobs**: "Stop all dev VMs at 8pm daily"
+- **Real-Time Alerts**: Cloud-native monitoring with auto-remediation
+- **Long-Running Operations**: Multi-hour scans, migrations
+- **Cross-Device Access**: State syncs across laptop and cloud
+
+**Event-Based Lifecycle**:
+```
+Scheduler triggers → Container starts → Loads vector store from S3
+→ Executes operation → Saves results → Shuts down
+```
+
+**Cost Optimization**: Only runs when needed (event-driven compute)
+
+---
+
+## **Key Architecture Changes from Legacy AWS-Only**
+
+| Aspect | Old (AWS-Only) | New (Escher Multi-Cloud) |
+|--------|----------------|--------------------------|
+| **Product Name** | AWS CloudOps AI Agent | Escher |
+| **Cloud Support** | AWS only | AWS + Azure + GCP |
+| **Collections** | 2 (chat_history, aws_estate) | 5 (estate, chat, ops, reports, alerts) |
+| **Server** | Stateless | Still stateless (unchanged) |
+| **Credentials** | AWS keys | AWS + Azure + GCP |
+| **Resource Naming** | aws_estate | cloud_estate |
+| **Deployment** | Local only | Laptop + Optional Cloud Extension |
+| **Automation** | Limited | 24/7 with Extended Runtime |
+
+---
+
+## **Why Tauri?**
 
 | Aspect | Electron | Tauri | Impact |
 |--------|----------|-------|--------|
 | **Size** | ~100MB | ~3-5MB | 95% smaller |
-| **Performance** | Node.js | Rust | Faster execution |
+| **Performance** | Node.js | Rust | 2-5x faster execution |
 | **Memory** | ~100-200MB | ~30-50MB | 70% less RAM |
 | **Security** | JS isolation | Rust + OS sandbox | More secure |
-| **Local DB** | Better Node support | Better Rust support | Qdrant native |
+| **Local DB** | Better Node support | Native Rust support | Qdrant native |
 
-### **2. Local Qdrant Vector Database**
-
-**Purpose:** Fast semantic search over AWS resources + chat history storage
-
-**Why Qdrant locally?**
-- Semantic search: "production database" → finds pg-instance-main1
-- Tag matching: "env=prod AND app=main" → finds related resources
-- Name variations: "pg-main1" → finds "pg-instance-main1"
-- Offline capability: Works without internet
-- Privacy: AWS estate never leaves client
-
-**Architecture - Dual Collection Strategy:**
-
-The Storage Service uses a single Qdrant instance with two collections optimized for different use cases:
-
-```
-Local Qdrant Instance (Embedded mode, ~20-30 MB)
-
-┌─────────────────────────────────────────────────────────────────┐
-│ Collection 1: "chat_history"                                     │
-├─────────────────────────────────────────────────────────────────┤
-│ Purpose: Store conversation history                              │
-│ Vectors: 1D dummy vectors (filter-based access, not semantic)    │
-│ Point IDs: Random UUIDs (immutable, prevents conflicts)          │
-│ Encryption: AES-256-GCM for message content                      │
-│                                                                   │
-│ Example Point:                                                    │
-│ {                                                                 │
-│   "id": "uuid-v4-random",                                         │
-│   "vector": [0.0],  // 1D dummy vector                           │
-│   "payload": {                                                    │
-│     "conversation_id": "conv-123",                                │
-│     "user_id": "user-456",                                        │
-│     "timestamp": 1696800000,                                      │
-│     "role": "user",                                               │
-│     "encrypted_content": "AES-256-GCM encrypted message"          │
-│   }                                                               │
-│ }                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│ Collection 2: "aws_estate"                                       │
-├─────────────────────────────────────────────────────────────────┤
-│ Purpose: Store AWS resources with semantic search                │
-│ Vectors: 384D real embeddings (all-MiniLM-L6-v2 model)           │
-│ Point IDs: Deterministic {account}-{region}-{identifier}         │
-│ Encryption: AES-256-GCM for sensitive data (IAM, metadata)       │
-│                                                                   │
-│ Example Point:                                                    │
-│ {                                                                 │
-│   "id": "123456789012-us-west-2-i-0123456789abcdef0",            │
-│   "vector": [0.123, 0.456, ...],  // 384D embedding              │
-│   "payload": {                                                    │
-│     // Plain text (indexed for filtering)                        │
-│     "resource_type": "ec2_instance",                              │
-│     "account_id": "123456789012",                                 │
-│     "region": "us-west-2",                                        │
-│     "state": "running",                                           │
-│     "tags": {"env": "production", "app": "api"},                  │
-│     "last_synced": 1696800000,                                    │
-│                                                                   │
-│     // Encrypted sensitive data                                  │
-│     "encrypted_data": {                                           │
-│       "identifier": "i-0123456789abcdef0",                        │
-│       "arn": "arn:aws:ec2:...",                                   │
-│       "name": "web-server-1",                                     │
-│       "iam": {                                                    │
-│         "allowed_actions": ["ec2:StopInstances", ...],            │
-│         "denied_actions": ["ec2:TerminateInstances"],             │
-│         "user_context": {                                         │
-│           "username": "john.doe",                                 │
-│           "role_arn": "arn:aws:iam::...:role/Developer"           │
-│         }                                                         │
-│       },                                                          │
-│       "constraints": {                                            │
-│         "can_stop": true,                                         │
-│         "can_start": false,                                       │
-│         "can_delete": false                                       │
-│       },                                                          │
-│       "metadata": { /* service-specific */ }                      │
-│     }                                                             │
-│   }                                                               │
-│ }                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Key Design Decisions:**
-- **Deterministic IDs for Estate**: Same resource always gets same ID → upserts update existing points (no duplicates)
-- **Random IDs for Chat**: Immutable conversations → prevents conflicts
-- **Encryption**: AES-256-GCM with OS Keychain (macOS/Windows/Linux)
-- **IAM per Resource**: Every resource stores its allowed/denied actions for current user
-- **Embedding Model**: all-MiniLM-L6-v2 (384 dimensions, fast, accurate)
+**Benefits for Multi-Cloud Operations**:
+- **Fast CLI Execution**: Rust calls AWS/Azure/GCP CLI directly (no Node overhead)
+- **Secure Credentials**: OS keychain integration (native APIs)
+- **Low Resource Usage**: Important when managing thousands of resources
+- **Cross-Platform**: macOS, Windows, Linux with single codebase
 
 ---
 
-## **Enhanced Request Flow Architecture**
+## **Data Flow Examples**
+
+### **Query Flow: "Show idle Azure VMs"**
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  PHASE 1: LOCAL RESOURCE DISCOVERY (Client)                    │
-└─────────────────────────────────────────────────────────────────┘
+1. User types: "Show idle Azure VMs"
+   ↓
+2. Client Frontend → ChatController → Request Builder
+   ↓
+3. Request Builder:
+   - Searches cloud_estate collection (vector + filter)
+   - Filter: cloud_provider=azure, resource_type=compute_instance
+   - Loads last 5 chat messages for context
+   ↓
+4. Sends to Escher AI Server:
+   {
+     query: "Show idle Azure VMs",
+     context: {
+       recent_messages: [...],
+       azure_vms: [... summary of VMs found ...]
+     }
+   }
+   ↓
+5. Escher AI Server:
+   - Understands intent: List + filter by utilization
+   - RAG lookup: Azure VM idle detection methods
+   - Returns: Structured query for Azure Monitor metrics
+   ↓
+6. Client Rust Backend:
+   - Executes: az monitor metrics list ...
+   - Filters VMs with CPU < 5% for 7 days
+   - Stores results in chat_history collection
+   ↓
+7. Display results in UI table with:
+   - VM name, size, location, average CPU, monthly cost
+   - Actions: [Stop VM] [Deallocate] [Resize]
+```
 
-User: "Stop pg-instance-main1"
-  ↓
-┌─────────────────────────────────────────────────────────────┐
-│ Client - Semantic Search in Local Qdrant                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│ Generate embedding: embed("pg-instance-main1")            │
-│                                                             │
-│ Search Qdrant:                                             │
-│ • Query: "pg-instance-main1"                               │
-│ • Filters: None (search all resource types)               │
-│                                                             │
-│ Results:                                                    │
-│ 1. rds-pg-instance-main1 (score: 0.99) ← Perfect match   │
-│ 2. ec2-pg-backup-server (score: 0.45)                     │
-│ 3. s3-pg-backups-bucket (score: 0.42)                     │
-│                                                             │
-│ Selected: rds-pg-instance-main1                            │
-│                                                             │
-│ Extract full metadata from payload:                         │
-│ • Resource type: RDS                                        │
-│ • Account: 123456789012                                    │
-│ • Region: us-west-2                                        │
-│ • Current state: available                                  │
-│ • Permissions: [rds:StopDBInstance, ...]                   │
-│ • Constraints: {can_stop: true, has_replicas: false}       │
-└─────────────────────────────────────────────────────────────┘
-  ↓
-┌─────────────────────────────────────────────────────────────┐
-│  PHASE 2: BUILD ENRICHED REQUEST (Client)                   │
-└─────────────────────────────────────────────────────────────┘
+### **Execution Flow: "Stop all dev GCP instances"**
 
-Client packages complete context:
-  ↓
-Request Payload:
-{
-  "prompt": "Stop pg-instance-main1",
-  
-  "identified_resources": [
-    {
-      "resource_type": "rds_instance",
-      "db_instance_identifier": "pg-instance-main1",
-      "account_id": "123456789012",
-      "region": "us-west-2",
-      "current_state": "available",
-      "engine": "postgres",
-      "engine_version": "14.7",
-      "multi_az": true,
-      "tags": {"environment": "production"},
-      "available_permissions": ["rds:StopDBInstance", ...],
-      "constraints": {
-        "can_stop": true,
-        "has_read_replicas": false,
-        "automated_backups_enabled": true
-      }
-    }
-  ],
-  
-  "user_context": {
-    "user_id": "user-123",
-    "default_region": "us-west-2",
-    "aws_accounts": ["123456789012"]
-  }
-}
-  ↓
-Send to Server
-  ↓
-┌─────────────────────────────────────────────────────────────┐
-│  PHASE 3: SERVER PROCESSING                                 │
-└─────────────────────────────────────────────────────────────┘
+```
+1. User: "Stop all dev GCP instances"
+   ↓
+2. Client searches cloud_estate:
+   - Filter: cloud_provider=gcp, tags.env=dev, resource_type=compute_instance
+   - Finds: 15 GCP Compute Engine instances
+   ↓
+3. Sends to Escher AI Server with full context
+   ↓
+4. AI Server analyzes:
+   - High-risk operation (stops 15 instances)
+   - Generates execution plan with safety checks
+   - Returns structured playbook
+   ↓
+5. Client displays confirmation:
+   "About to stop 15 GCP instances in dev environment:
+    - project-x: 8 instances
+    - project-y: 7 instances
 
-Server receives COMPLETE context (no guessing needed)
-  ↓
-┌─────────────────────────────────────────────────────────────┐
-│ Classification Agent                                        │
-├─────────────────────────────────────────────────────────────┤
-│ • Intent: "Stop RDS instance"                              │
-│ • Confidence: 0.99 (resource already identified)           │
-│ • System: AWS RDS                                          │
-│ • Operation: Stop                                           │
-│ • Route to: AWS Operations Agent                           │
-└─────────────────────────────────────────────────────────────┘
-  ↓
-┌─────────────────────────────────────────────────────────────┐
-│ RAG Search (Server's Playbook Vector DB)                   │
-├─────────────────────────────────────────────────────────────┤
-│ Query: "stop rds instance"                                  │
-│ Filters: {system: "aws", service: "rds"}                   │
-│                                                             │
-│ Results:                                                    │
-│ 1. aws_rds_stop_instance (score: 0.95)                    │
-│ 2. aws_rds_stop_with_snapshot (score: 0.89)               │
-│ 3. aws_rds_reboot_instance (score: 0.45)                  │
-└─────────────────────────────────────────────────────────────┘
-  ↓
-┌─────────────────────────────────────────────────────────────┐
-│ AWS Operations Agent                                        │
-├─────────────────────────────────────────────────────────────┤
-│ Load playbook: aws_rds_stop_instance.yaml                  │
-│                                                             │
-│ Parameter Resolution:                                       │
-│ • db_instance_identifier: "pg-instance-main1"              │
-│   (from identified_resources)                              │
-│ • region: "us-west-2"                                      │
-│   (from identified_resources)                              │
-│ • account: "123456789012"                                  │
-│   (from identified_resources)                              │
-│                                                             │
-│ ALL PARAMETERS PRE-FILLED - NO AMBIGUITY                   │
-│                                                             │
-│ Risk Assessment:                                            │
-│ • Production database (from tags)                          │
-│ • Currently available (can be stopped)                     │
-│ • No read replicas (safe to stop)                          │
-│ • Multi-AZ enabled (consider impact)                       │
-│ • Risk: Medium                                              │
-│ • Approval: Required                                        │
-└─────────────────────────────────────────────────────────────┘
-  ↓
-┌─────────────────────────────────────────────────────────────┐
-│  PHASE 4: SERVER RESPONSE                                   │
-└─────────────────────────────────────────────────────────────┘
-
-Server → Client:
-{
-  "explain_plan": "I will stop the RDS PostgreSQL instance 
-                   'pg-instance-main1' in us-west-2. This is 
-                   a production Multi-AZ database. The instance 
-                   will be unavailable but can be restarted 
-                   at any time.",
-  
-  "script": {
-    "steps": [
-      {
-        "step_id": "1",
-        "command": "aws rds stop-db-instance",
-        "args": [
-          "--db-instance-identifier", "pg-instance-main1",
-          "--region", "us-west-2"
-        ]
-        // ALL PARAMETERS FILLED - READY TO EXECUTE
-      }
-    ]
-  },
-  
-  "risk_assessment": {
-    "level": "medium",
-    "reasons": [
-      "Production database",
-      "Multi-AZ enabled",
-      "No read replicas to affect"
-    ],
-    "impact": "Database will be unavailable until restarted"
-  },
-  
-  "approval_required": true
-}
-  ↓
-┌─────────────────────────────────────────────────────────────┐
-│  PHASE 5: CLIENT EXECUTION                                  │
-└─────────────────────────────────────────────────────────────┘
-
-Client receives ready-to-execute script
-  ↓
-Display to user + Request approval
-  ↓
-User approves
-  ↓
-Execute: aws rds stop-db-instance --db-instance-identifier 
-         pg-instance-main1 --region us-west-2
-  ↓
-Show result to user
+    Continue? [Yes] [No] [Show Details]"
+   ↓
+6. User confirms → Rust Execution Engine:
+   - Executes: gcloud compute instances stop ... (parallel)
+   - Logs each operation in executed_operations collection
+   - Stores audit trail in immutable_reports collection
+   ↓
+7. Display results:
+   "✅ Successfully stopped 15 GCP instances
+    ⏱️  Operation completed in 12 seconds
+    💰 Estimated monthly savings: $450"
 ```
 
 ---
 
-## **Data Synchronization Architecture**
+## **Security Architecture**
 
+### **Credential Management**
+
+**Storage**:
+- **Laptop**: OS Keychain (Keychain Access on macOS, Windows Credential Manager, Linux Secret Service)
+- **Extended Runtime**: SSM Parameter Store (AWS), Key Vault (Azure), Secret Manager (GCP)
+
+**Access Pattern**:
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  AWS ESTATE SYNC SYSTEM (Client)                               │
-│  Powered by Estate Scanner Module                              │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│  ESTATE SCANNER - THIN ORCHESTRATOR                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Architecture: Coordinates Execution Engine + Storage Service│
-│                                                             │
-│  Sync Strategy:                                            │
-│  • Full sync: Every 6 hours (or on-demand)                │
-│  • Incremental sync: Every 15 minutes                      │
-│  • Event-driven sync: On AWS CloudWatch events (optional) │
-│                                                             │
-│  4-Level Parallelism:                                      │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ Level 1: Accounts (parallel)                         │ │
-│  │   ├─ Production Account (123456789012)              │ │
-│  │   ├─ Staging Account (987654321098)                 │ │
-│  │   └─ Development Account (456789012345)             │ │
-│  │                                                       │ │
-│  │ Level 2: Regions (parallel per account)              │ │
-│  │   ├─ us-east-1                                       │ │
-│  │   ├─ us-west-2                                       │ │
-│  │   └─ eu-west-1                                       │ │
-│  │                                                       │ │
-│  │ Level 3: Services (parallel per region)              │ │
-│  │   ├─ EC2Scanner                                      │ │
-│  │   ├─ RDSScanner                                      │ │
-│  │   ├─ S3Scanner                                       │ │
-│  │   ├─ LambdaScanner                                   │ │
-│  │   └─ VPCScanner                                      │ │
-│  │                                                       │ │
-│  │ Level 4: Resources (batch per service)               │ │
-│  │   └─ Process 100 resources at a time                 │ │
-│  └──────────────────────────────────────────────────────┘ │
-│                                                             │
-│  Pluggable Scanner Trait:                                  │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ trait ServiceScanner {                               │ │
-│  │   async fn scan(&self) -> Vec<AWSResource>;         │ │
-│  │   async fn discover_iam(&self, arn) -> IAMPerms;    │ │
-│  │   async fn analyze_constraints(&self) -> Constraints;│ │
-│  │ }                                                     │ │
-│  │                                                       │ │
-│  │ Implementations:                                      │ │
-│  │ • EC2Scanner - Instances, volumes, snapshots         │ │
-│  │ • RDSScanner - DB instances, clusters, snapshots     │ │
-│  │ • S3Scanner - Buckets, lifecycle policies            │ │
-│  │ • LambdaScanner - Functions, layers, aliases         │ │
-│  │ • VPCScanner - VPCs, subnets, security groups        │ │
-│  └──────────────────────────────────────────────────────┘ │
-│                                                             │
-│  Sync Process:                                             │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ 1. Execute AWS CLI via Execution Engine              │ │
-│  │    • Returns JSON in stdout                          │ │
-│  │    • Background execution with streaming             │ │
-│  └──────────────────────────────────────────────────────┘ │
-│               ↓                                             │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ 2. Transform to AWSResource format                   │ │
-│  │    • Parse AWS CLI JSON output                       │ │
-│  │    • Normalize structure across services             │ │
-│  │    • Build ARN, extract tags                         │ │
-│  └──────────────────────────────────────────────────────┘ │
-│               ↓                                             │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ 3. Discover IAM permissions                          │ │
-│  │    • Call IAM SimulatePrincipalPolicy API            │ │
-│  │    • Parse allowed/denied actions                    │ │
-│  │    • Embed user context (role ARN, session)          │ │
-│  └──────────────────────────────────────────────────────┘ │
-│               ↓                                             │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ 4. Analyze constraints                               │ │
-│  │    • Check resource state (can_stop, can_start)      │ │
-│  │    • Check dependencies (has_dependencies)           │ │
-│  │    • Check backups (has_backups)                     │ │
-│  └──────────────────────────────────────────────────────┘ │
-│               ↓                                             │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ 5. Generate embeddings                               │ │
-│  │    • Model: all-MiniLM-L6-v2 (384D)                  │ │
-│  │    • Input: name + tags + identifier                 │ │
-│  │    • Output: [0.123, 0.456, ...] (384 floats)        │ │
-│  └──────────────────────────────────────────────────────┘ │
-│               ↓                                             │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ 6. Upsert to Storage Service                         │ │
-│  │    • Generate deterministic point ID                 │ │
-│  │    • Encrypt sensitive data (AES-256-GCM)            │ │
-│  │    • Batch upsert to Qdrant                          │ │
-│  │    • Remove deleted resources                        │ │
-│  └──────────────────────────────────────────────────────┘ │
-│                                                             │
-│  Graceful Degradation:                                     │
-│  • Service scan failure → Continue with other services    │
-│  • IAM discovery failure → Store with empty permissions   │
-│  • Embedding failure → Retry or skip resource             │
-│                                                             │
-│  Performance:                                               │
-│  • ~30-50s for 1000 resources                              │
-│  • Concurrency limit: 10 parallel scans                    │
-│  • Batch size: 100 resources per upsert                    │
-│                                                             │
-│  Sync Status Tracking:                                     │
-│  • Last sync timestamp per service                         │
-│  • Sync errors and retries                                 │
-│  • Resource count changes                                  │
-│  • IAM discovery success rate                              │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│  MULTI-ACCOUNT SUPPORT                                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  User has multiple AWS accounts:                           │
-│  • Production Account (123456789012)                       │
-│  • Staging Account (987654321098)                          │
-│  • Development Account (456789012345)                      │
-│                                                             │
-│  Qdrant Structure:                                         │
-│  {                                                          │
-│    "id": "rds-prod-pg-instance-main1",                     │
-│    "payload": {                                             │
-│      "account_id": "123456789012",                         │
-│      "account_name": "production",                         │
-│      ...                                                    │
-│    }                                                        │
-│  }                                                          │
-│                                                             │
-│  Search with account filter:                               │
-│  • Default: Search all accounts                            │
-│  • Explicit: "Stop pg-main1 in production account"        │
-│  • Filter by context                                       │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│  IAM PERMISSION DISCOVERY                                    │
-├─────────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Estate Scanner discovers per-resource IAM permissions:     │
-│                                                             │
-│  Flow:                                                      │
-│  1. Get current user/role ARN (via STS GetCallerIdentity)  │
-│  2. For each discovered resource:                          │
-│     a. Determine relevant actions for resource type        │
-│        (e.g., ec2:StopInstances, ec2:StartInstances)      │
-│     b. Call IAM SimulatePrincipalPolicy API                │
-│     c. Parse allowed/denied actions from response          │
-│     d. Create IAMPermissions struct                        │
-│  3. Embed IAMPermissions in AWSResource                    │
-│  4. Store encrypted in Qdrant                              │
-│                                                             │
-│  Result: Every resource knows what actions user can take   │
-│                                                             │
-│  Example IAM Discovery:                                     │
-│  Resource: arn:aws:ec2:us-west-2:123456789012:instance/i-123│
-│  User: arn:aws:iam::123456789012:role/DeveloperRole       │
-│                                                             │
-│  Actions checked:                                           │
-│  • ec2:DescribeInstances → Allowed                        │
-│  • ec2:StartInstances → Allowed                           │
-│  • ec2:StopInstances → Allowed                            │
-│  • ec2:RebootInstances → Allowed                          │
-│  • ec2:TerminateInstances → Denied (explicit)             │
-│                                                             │
-│  Stored in resource payload:                               │
-│  {                                                          │
-│    "iam": {                                                 │
-│      "allowed_actions": [                                   │
-│        "ec2:DescribeInstances",                            │
-│        "ec2:StartInstances",                               │
-│        "ec2:StopInstances",                                │
-│        "ec2:RebootInstances"                               │
-│      ],                                                     │
-│      "denied_actions": ["ec2:TerminateInstances"],         │
-│      "user_context": {                                      │
-│        "username": "john.doe",                             │
-│        "role_arn": "arn:aws:iam::...:role/Developer",     │
-│        "session_expires": "2025-10-10T23:59:59Z"          │
-│      }                                                      │
-│    }                                                        │
-│  }                                                          │
-│                                                             │
-│  Benefits:                                                  │
-│  • Server receives pre-validated permissions               │
-│  • Client can show/hide actions based on permissions       │
-│  • No need to check IAM at request time                    │
-│  • Supports role assumption and session tokens             │
-└─────────────────────────────────────────────────────────────┘
+User grants access → Credentials stored securely
+    ↓
+Escher Client/Runtime retrieves credentials
+    ↓
+Executes cloud CLI/SDK with credentials
+    ↓
+Credentials NEVER sent to Escher AI Server
 ```
 
----
+### **Encryption**
 
-## **Benefits of This Architecture**
+**At Rest**:
+- Vector store encrypted (AES-256)
+- Sensitive payload fields encrypted individually
+- Credentials encrypted by OS/Cloud provider
 
-### **1. Precision**
-
-| Without Local Estate | With Local Estate |
-|---------------------|-------------------|
-| Server guesses parameters | All parameters known upfront |
-| "Which account?" "Which region?" | Account + region pre-filled |
-| Ambiguous resource names | Exact resource identification |
-| Multiple back-and-forth | Single request-response |
-
-### **2. Performance**
-
-| Aspect | Impact |
-|--------|--------|
-| **Resource lookup** | Instant (local Qdrant) |
-| **No guessing** | Faster server processing |
-| **Fewer LLM calls** | Lower cost |
-| **Offline search** | Works without internet |
-
-### **3. Security**
-
-| Aspect | Benefit |
-|--------|---------|
-| **AWS estate stays local** | Never sent to server (privacy) |
-| **Credentials local** | Never leave client |
-| **Fine-grained permissions** | Known per-resource |
-| **Audit trail** | Local execution history |
-
-### **4. User Experience**
-
-| Feature | UX Benefit |
-|---------|-----------|
-| **Fuzzy search** | "pg-main" finds "pg-instance-main1" |
-| **Smart suggestions** | Autocomplete resource names |
-| **Visual explorer** | Browse AWS estate locally |
-| **Fast response** | No waiting for server lookup |
+**In Transit**:
+- HTTPS/TLS 1.3 for all network communication
+- Certificate pinning for Escher AI Server
 
 ---
 
-## **Architecture Comparison**
+## **See Also**
 
-### **Old (Stateless Client)**
-
-```
-User: "Stop pg-instance-main1"
-  ↓
-Client → Server: "Stop pg-instance-main1"
-  ↓
-Server: "Which account? Which region? Is this RDS or EC2?"
-  ↓
-Client ← Server: Clarifying questions
-  ↓
-User provides more info
-  ↓
-Client → Server: Updated request
-  ↓
-Server generates script
-```
-
-**Issues:** Multiple round-trips, ambiguity, slow
+- [PRODUCT-VISION.md](PRODUCT-VISION.md) - Complete product vision with deployment models
+- [system-overview.md](system-overview.md) - High-level system overview
+- [key-decisions.md](key-decisions.md) - Architecture Decision Records
+- [technology-stack.md](technology-stack.md) - Detailed technology choices
+- [../02-client/](../02-client/) - Client implementation details
+- [../03-server/](../03-server/) - Server implementation details
 
 ---
 
-### **New (Stateful Client with Local Estate)**
-
-```
-User: "Stop pg-instance-main1"
-  ↓
-Client searches Qdrant: Found RDS in us-west-2, account 123456
-  ↓
-Client → Server: Complete context (resource + metadata)
-  ↓
-Server generates precise script (no ambiguity)
-  ↓
-Client ← Server: Ready-to-execute script
-  ↓
-Client executes immediately
-```
-
-**Benefits:** Single round-trip, precise, fast
-
----
-
-## **Key Architecture Decisions**
-
-| Decision | Rationale |
-|----------|-----------|
-| **Tauri over Electron** | Smaller, faster, more secure, better for Qdrant |
-| **Qdrant local vector DB** | Semantic search, fuzzy matching, offline capability |
-| **AWS estate on client** | Privacy, speed, precision, offline mode |
-| **Enriched context to server** | Server gets exact parameters, no guessing |
-| **Server stays stateless** | Scalable, no estate data storage |
-| **Periodic sync** | Fresh data without constant API calls |
-
----
-
-## **Component Breakdown**
-
-### **Client Modules**
-
-For complete module documentation, see [Client Modules Overview](../../docs/02-client/modules/overview.md).
-
-| Module | Status | Description |
-|--------|--------|-------------|
-| **[Storage Service](../../docs/02-client/modules/storage-service/)** | ✅ Complete | Single Qdrant instance, dual collections, IAM integration, S3 backup |
-| **[Execution Engine](../../docs/02-client/modules/execution-engine/)** | ✅ Complete | Pure Rust crate, Tokio + streaming, background execution |
-| **[Estate Scanner](../../docs/02-client/modules/estate-scanner/)** | ✅ Complete | Thin orchestrator, pluggable scanners, IAM discovery, semantic embeddings |
-| **[Common Types](../../docs/02-client/modules/common/)** | ✅ Complete | Shared data structures (AWSResource, IAMPermissions, etc.) |
-| **[Request Builder](../../docs/02-client/modules/request-builder/)** | 🔄 Next | Context enrichment, server communication |
-
-#### Module Details
-
-**Storage Service** (`cloudops-storage-service`):
-- Single embedded Qdrant instance (~20-30 MB)
-- Dual collection strategy (chat history + AWS estate)
-- Application-level encryption (AES-256-GCM + OS Keychain)
-- Automatic S3 backup (7d local, 30d S3)
-- IAM permissions embedded per resource
-
-**Execution Engine** (`cloudops-execution-engine`):
-- Pure Rust crate (reusable library, no framework dependencies)
-- Async execution with Tokio + real-time streaming
-- Background execution (returns execution_id immediately)
-- Multiple strategies (serial, parallel, dependency-based)
-- Command types: Script, Exec, Shell, AwsCli
-- Pluggable event handlers (Tauri, WebSocket, logging)
-
-**Estate Scanner** (`cloudops-estate-scanner`):
-- Thin orchestrator (coordinates Execution Engine + Storage Service)
-- Pluggable scanner traits (EC2, RDS, S3, Lambda, VPC)
-- IAM discovery via SimulatePrincipalPolicy API
-- Semantic embeddings (384D using all-MiniLM-L6-v2)
-- 4-level parallelism (Accounts → Regions → Services → Resources)
-- Performance: ~30-50s for 1000 resources
-
-**Common Types** (`cloudops-common`):
-- Shared data structures across all modules
-- Core types: AWSResource, IAMPermissions, UserContext, ResourceConstraints
-- Zero framework dependencies (only serde, chrono)
-- Single source of truth for type safety
-
-**Request Builder** (`cloudops-request-builder`):
-- Context enrichment (adds resource metadata + chat history)
-- Server communication (HTTP client)
-- Request/response handling
-
-### **Server Components**
-
-1. **Classification Agent** - Routes requests (now easier with context)
-2. **AWS Operations Agent** - Generates scripts (now with exact params)
-3. **Playbook Repository** - YAML playbooks in Git
-4. **Metadata DB** - Playbook metadata for RAG
-5. **Vector DB** - Playbook embeddings (separate from client's resource DB)
-
----
-
-## **Summary**
-
-This architecture gives you:
-
-✅ **Fast** - Local semantic search in Qdrant
-✅ **Precise** - Server receives exact resource details
-✅ **Private** - AWS estate never leaves client
-✅ **Offline-capable** - Search works without internet
-✅ **Smart** - Fuzzy matching, tag-based search
-✅ **Scalable** - Server remains stateless
-✅ **Secure** - Credentials and estate stay local
-
-The key insight: **Client knows everything about AWS resources, server knows everything about operations**. Together they generate perfect execution scripts.
-
----
-
-## **Learn More**
-
-### Client Module Documentation
-
-For detailed implementation guides, see:
-
-- **[Client Modules Overview](../02-client/modules/overview.md)** - Complete module architecture
-- **[Storage Service](../02-client/modules/storage-service/)** - Qdrant, encryption, backup (~4,000 lines)
-- **[Execution Engine](../02-client/modules/execution-engine/)** - Command execution with Tokio (~6,000 lines)
-- **[Estate Scanner](../02-client/modules/estate-scanner/)** - AWS discovery, IAM, embeddings (~3,000 lines)
-- **[Common Types](../02-client/modules/common/)** - Shared data structures (~650 lines)
-- **[Module Interaction Analysis](../../working-docs/MODULE-INTERACTION-ANALYSIS.md)** - Data flow between modules
-
-### Related Documentation
-
-- **[System Overview](system-overview.md)** - High-level system architecture
-- **[Key Decisions](key-decisions.md)** - Major architectural choices
-- **[Technology Stack](technology-stack.md)** - Tech choices and rationale
-- **[ADRs](../../adr/)** - Architecture Decision Records
+**This architecture enables Escher to be a privacy-first, multi-cloud operations platform with the flexibility to run entirely on your laptop or extend to your cloud for 24/7 automation.**

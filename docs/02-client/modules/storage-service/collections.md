@@ -4,16 +4,26 @@ Detailed schemas for Qdrant collections used by the Storage Service.
 
 ## Overview
 
-The Storage Service uses two Qdrant collections:
+**Target Architecture**: The Storage Service will support **5 RAG collections** as defined in the PRODUCT-VISION:
 
-1. **chat_history** - Stores conversation messages (no vector search needed)
-2. **aws_estate** - Stores AWS resources (with semantic search)
+1. **Cloud Estate Inventory** - Multi-cloud resource metadata (AWS, Azure, GCP)
+2. **Chat History** - Conversational history with AI
+3. **Executed Operations** - History of operations executed
+4. **Immutable Reports** - Cost reports, audit logs, compliance reports
+5. **Alerts & Events** - Alert rules, alert history, scan results, morning reports
+
+**Current Implementation Status** (Phase 1):
+- ✅ **chat_history** - Stores conversation messages (no vector search needed)
+- ✅ **cloud_estate** - Stores multi-cloud resources (with semantic search)
+- 🚧 **Executed Operations, Immutable Reports, Alerts & Events** - To be implemented
+
+This document describes the **currently implemented collections** (Phase 1). Additional collections will be added as the storage service evolves.
 
 ## Collection Comparison
 
-| Aspect | chat_history | aws_estate |
+| Aspect | chat_history | cloud_estate |
 |--------|-------------|------------|
-| **Purpose** | Store conversation messages | Store AWS resource metadata |
+| **Purpose** | Store conversation messages | Store multi-cloud resource metadata (AWS/Azure/GCP) |
 | **Vector Search** | No (dummy vectors) | Yes (semantic search) |
 | **Vector Size** | 1 dimension | 384/768/1536 (model-dependent) |
 | **Access Pattern** | Filter by context_id | Vector search + filters |
