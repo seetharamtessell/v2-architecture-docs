@@ -230,9 +230,19 @@ export const LineChart: React.FC<LineChartProps> = ({
 - [ ] ExecutionProgress
 - [ ] StepIndicator
 - [ ] CommandOutput (terminal-style)
-- [ ] ResourceCard
+- [ ] ResourceCard (multi-cloud: AWS/Azure/GCP)
 - [ ] ResourceTable
 - [ ] ResourceTree
+- [ ] AlertBanner (CRITICAL/HIGH/MEDIUM severity levels)
+- [ ] MorningReportCard (scannable sections with quick fixes)
+- [ ] AlertConversation (Q&A interface for alerts)
+- [ ] TimelineVisualization (incident response timeline)
+- [ ] ConversationalReport (morning report with inline Q&A)
+- [ ] QuickQuestion (pre-populated question buttons)
+- [ ] ReportAnswer (AI-generated answer with follow-up)
+- [ ] CostTrendChart (spending over time with anomalies)
+- [ ] OptimizationCard (cost savings with 1-click fix)
+- [ ] SavingsSummary (total monthly savings)
 - [ ] DynamicRenderer (component registry)
 
 **Example**:
@@ -490,7 +500,10 @@ Create state management for all domains.
 - [ ] useScanStore
 - [ ] usePlaybookStore
 - [ ] useAuthStore
-- [ ] useAlertStore
+- [ ] useAlertStore (NEW - alerts, unreadCount, alertHistory)
+- [ ] useMorningReportStore (NEW - latestReport, Q&A history)
+- [ ] useDeploymentStore (NEW - deploymentModel, syncStatus)
+- [ ] useCostStore (NEW - costSummary, optimizations, savings)
 - [ ] useRecommendationStore
 
 **Example**:
@@ -562,7 +575,11 @@ Implement business logic layer.
 - [ ] PlaybookController
 - [ ] EstateScanController
 - [ ] RecommendationController
-- [ ] AlertController
+- [ ] AlertController (NEW - alert acknowledgment, timeline)
+- [ ] MorningReportController (NEW - Q&A, report generation)
+- [ ] DeploymentController (NEW - deployment model switching)
+- [ ] AutoRemediationController (NEW - pre-approved actions)
+- [ ] CostController (NEW - cost summary, optimizations)
 - [ ] PermissionController
 
 **Example**:
@@ -652,7 +669,14 @@ Build complete feature views.
 5. **Permissions** (form-heavy)
 6. **Recommendations** (list + actions)
 7. **Alerts** (list + filters)
-8. **Reports** (charts + tables)
+8. **Morning Report** (NEW - interactive daily report with Q&A)
+9. **Alert History** (NEW - 7-day alert log with conversational search)
+10. **Alert Timeline** (NEW - second-by-second incident response)
+11. **Cost Dashboard** (NEW - real-time spend, trends, anomalies)
+12. **Optimization** (NEW - cost savings with 1-click fixes)
+13. **Settings** (NEW - deployment model, auto-remediation, templates)
+14. **Deployment Setup Wizard** (NEW - "Extend My Laptop" configuration)
+15. **Reports** (charts + tables)
 
 #### 6.2 Example: Ops Chat View
 ```typescript
