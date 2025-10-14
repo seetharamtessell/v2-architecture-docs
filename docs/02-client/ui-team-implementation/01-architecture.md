@@ -24,7 +24,11 @@
 │  • PlaybookController                       │
 │  • EstateScanController                     │
 │  • RecommendationController                 │
-│  • AlertController                          │
+│  • AlertController (NEW)                    │
+│  • MorningReportController (NEW)            │
+│  • DeploymentController (NEW)               │
+│  • AutoRemediationController (NEW)          │
+│  • CostController (NEW)                     │
 │  • PermissionController                     │
 └─────────────────────────────────────────────┘
                     ↕ Read/Write State
@@ -66,15 +70,32 @@
    - `LearningCenterView.tsx` - Dashboard
    - `PermissionsView.tsx` - Policy management
    - `RecommendationsView.tsx` - AI recommendations
-   - `AlertsView.tsx` - Notifications
-   - `ReportsView.tsx` - Analytics
+   - `AlertsView.tsx` - Real-time alert banners (CRITICAL/HIGH/MEDIUM)
+   - `MorningReportView.tsx` - Interactive daily report with AI-powered Q&A
+   - `AlertHistoryView.tsx` - All alerts from last 7 days with conversational search
+   - `AlertTimelineView.tsx` - Second-by-second incident analysis
+   - `ReportsView.tsx` - Analytics and reports
+   - `CostDashboardView.tsx` - Real-time spend, trends, forecasts
+   - `OptimizationView.tsx` - Idle resources, rightsizing with 1-click fixes
+   - `SettingsView.tsx` - Deployment model, auto-remediation, report templates
+   - `DeploymentSetupWizard.tsx` - Guide for "Extend My Laptop" setup
 
 2. **UI Agent Components** (Dynamic Rendering)
    - `PlaybookCard.tsx` - Playbook display
    - `ExecutionProgress.tsx` - Real-time execution
-   - `ResourceCard.tsx` - AWS resource display
+   - `ResourceCard.tsx` - Multi-cloud resource display (AWS/Azure/GCP)
    - `ChartDisplay.tsx` - Dynamic charts
    - `TableDisplay.tsx` - Dynamic tables
+   - `AlertBanner.tsx` - Severity-based alert banners (CRITICAL/HIGH/MEDIUM)
+   - `MorningReportCard.tsx` - Scannable report sections with 1-click fixes
+   - `AlertConversation.tsx` - Q&A interface for alert follow-up
+   - `TimelineVisualization.tsx` - Visual timeline of incident response
+   - `ConversationalReport.tsx` - Morning report with inline Q&A
+   - `QuickQuestion.tsx` - Pre-populated question buttons
+   - `ReportAnswer.tsx` - AI-generated answer with follow-up actions
+   - `CostTrendChart.tsx` - Spending over time with anomaly highlights
+   - `OptimizationCard.tsx` - Single optimization with cost savings and 1-click fix
+   - `SavingsSummary.tsx` - Total potential monthly savings
 
 3. **Shared Components** (Reusable)
    - `Button.tsx`, `Card.tsx`, `Modal.tsx`
@@ -471,10 +492,19 @@ usePlaybookStore - currentPlaybook, executionStatus, stepOutputs
 // 5. Auth Store
 useAuthStore - user, tokens, sessionInfo
 
-// 6. Alert Store
-useAlertStore - alerts, unreadCount
+// 6. Alert Store (NEW)
+useAlertStore - alerts, unreadCount, unacknowledgedAlerts, alertHistory
 
-// 7. Recommendation Store
+// 7. Morning Report Store (NEW)
+useMorningReportStore - latestReport, questionHistory, reportAnswers
+
+// 8. Deployment Store (NEW)
+useDeploymentStore - deploymentModel, extendMyLaptopStatus, syncStatus
+
+// 9. Cost Store (NEW)
+useCostStore - costSummary, optimizations, savingsOpportunities
+
+// 10. Recommendation Store
 useRecommendationStore - recommendations, filters
 ```
 
@@ -517,6 +547,13 @@ App
 │   ├── /permissions → PermissionsView
 │   ├── /recommendations → RecommendationsView
 │   ├── /alerts → AlertsView
+│   ├── /morning-report → MorningReportView
+│   ├── /alert-history → AlertHistoryView
+│   ├── /alert-timeline/:id → AlertTimelineView
+│   ├── /cost-dashboard → CostDashboardView
+│   ├── /optimization → OptimizationView
+│   ├── /settings → SettingsView
+│   ├── /deployment-setup → DeploymentSetupWizard
 │   └── /reports → ReportsView
 │
 └── Global Components
@@ -545,6 +582,13 @@ export const router = createBrowserRouter([
       { path: '/permissions', element: <PermissionsView /> },
       { path: '/recommendations', element: <RecommendationsView /> },
       { path: '/alerts', element: <AlertsView /> },
+      { path: '/morning-report', element: <MorningReportView /> },
+      { path: '/alert-history', element: <AlertHistoryView /> },
+      { path: '/alert-timeline/:id', element: <AlertTimelineView /> },
+      { path: '/cost-dashboard', element: <CostDashboardView /> },
+      { path: '/optimization', element: <OptimizationView /> },
+      { path: '/settings', element: <SettingsView /> },
+      { path: '/deployment-setup', element: <DeploymentSetupWizard /> },
       { path: '/reports', element: <ReportsView /> }
     ]
   },
