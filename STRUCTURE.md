@@ -46,8 +46,17 @@ Server architecture (stateless AI system):
 - **common** - ✅ Complete (~650 lines) - Shared data structures
 - **playbook-service** - ✅ Complete - Playbook management
 
-### 05-flows/, 06-security/, 07-data/, 08-operations/
-Additional documentation sections
+### 05-flows/
+Request flows, sync flows, execution flows
+
+### 06-security/
+Security and privacy architecture
+
+### 07-data/
+Data models, schemas, API contracts
+
+### 08-operations/
+Deployment, monitoring, disaster recovery
 
 ---
 
@@ -71,6 +80,12 @@ ADR templates and records
 
 ## Diagrams (`diagrams/`)
 System, component, and flow diagrams
+
+## Whiteboard Images (`whiteboard-images/`)
+Whiteboard photos and sketches from architecture discussions:
+- [README.md](whiteboard-images/README.md) - Organization and naming conventions
+- Photos organized by date (YYYY-MM-DD format)
+- Captures design discussions and brainstorming sessions
 
 ## Repositories (`repositories/`)
 Related repository links
