@@ -32,20 +32,8 @@ docs/
 │   ├── overview.md       # Client architecture overview
 │   ├── CLIENT-SUMMARY.md # Complete architecture summary with all UI
 │   ├── COMPLETION-STATUS.md # Progress tracking
-│   ├── modules/          # Modular client architecture (Rust)
-│   │   ├── storage-service/      ✅ Complete (~4,000 lines, 9 files)
-│   │   │   ├── architecture.md   # Overall design, components
-│   │   │   ├── api.md            # Complete Rust API reference
-│   │   │   ├── collections.md    # Qdrant schemas + IAM
-│   │   │   ├── configuration.md  # Config structure
-│   │   │   ├── encryption.md     # AES-256-GCM + Keychain
-│   │   │   ├── backup-restore.md # S3 backup workflows
-│   │   │   ├── point-management.md # ID strategies
-│   │   │   ├── operations.md     # Code examples
-│   │   │   └── testing.md        # Testing strategies
-│   │   ├── execution-engine/     ✅ Complete (~6,000 lines, 9 files)
-│   │   ├── estate-scanner/       ✅ Complete (~3,000 lines, 4 files)
-│   │   ├── common/               ✅ Complete (~650 lines, 1 file)
+│   ├── modules/          # Client-specific modules
+│   │   ├── overview.md
 │   │   └── request-builder/      🔄 Next (0% - to be designed)
 │   ├── frontend/         # Frontend architecture (React + TypeScript)
 │   │   ├── README.md
@@ -70,15 +58,33 @@ docs/
 │       ├── 04-mock-contracts.md  # TypeScript interfaces (~4,900 lines)
 │       └── 05-claude-prompts.md  # 25 ready-to-use prompts (~3,700 lines)
 ├── 03-server/            # Server ecosystem (its own complex world)
-│   ├── agents/           # Multi-agent system (classification, operations, validation, risk)
+│   ├── agents/           # Multi-agent system
+│   │   ├── overview.md
+│   │   └── playbook-agent.md     ✅ Complete (~2,227 lines) - LLM + RAG intelligence
 │   ├── microservices/    # Service-oriented architecture
 │   ├── data/             # Redis, Qdrant (playbooks), Git repo
 │   ├── infrastructure/   # Deployment, service mesh, scaling
 │   └── integration/      # APIs and external integrations
-├── 04-flows/             # Request, sync, execution flows
-├── 05-security/          # Security and privacy architecture
-├── 06-data/              # Data models, schemas, API contracts
-└── 07-operations/        # Deployment, monitoring, DR
+├── 04-services/          # Shared services used by both client and server
+│   ├── storage-service/          ✅ Complete (~4,000 lines, 10 files)
+│   │   ├── architecture.md       # Overall design, components
+│   │   ├── api.md                # Complete Rust API reference
+│   │   ├── collections.md        # Qdrant schemas + IAM
+│   │   ├── configuration.md      # Config structure
+│   │   ├── encryption.md         # AES-256-GCM + Keychain
+│   │   ├── backup-restore.md     # S3 backup workflows
+│   │   ├── point-management.md   # ID strategies
+│   │   ├── initialization.md     # Setup and bootstrap
+│   │   ├── operations.md         # Code examples
+│   │   └── testing.md            # Testing strategies
+│   ├── execution-engine/         ✅ Complete (~6,000 lines, 9 files)
+│   ├── estate-scanner/           ✅ Complete (~3,000 lines, 4 files)
+│   ├── common/                   ✅ Complete (~650 lines, 1 file)
+│   └── playbook-service/         ✅ Complete (client-side playbook management)
+├── 05-flows/             # Request, sync, execution flows
+├── 06-security/          # Security and privacy architecture
+├── 07-data/              # Data models, schemas, API contracts
+└── 08-operations/        # Deployment, monitoring, DR
 
 working-docs/             # Active design documents
 ├── CLIENT-DESIGN-WORKING-DOC-V2.md   # Storage Service design
@@ -176,7 +182,47 @@ Use the [adr/template.md](adr/template.md) for consistency.
   - 25 ready-to-use Claude Code prompts for rapid development
 - **Strategy**: UI team builds full functional application with mock data, then swaps mocks for real implementations (zero controller changes needed)
 
+### Shared Services Architecture (docs/04-services)
+
+These are **Rust crates** (like npm packages) used by both client and server:
+
+- **Storage Service** (storage-service crate):
+  - Client uses: Embedded Qdrant for local AWS estate + chat history (encrypted)
+  - Server uses: Embedded Qdrant for playbook metadata + S3 paths (not encrypted)
+  - Key difference: Client stores full data, server stores metadata + S3 references
+  - Both: Same API, same Rust crate, different Qdrant collections
+
+- **Execution Engine** (execution-engine crate):
+  - Client uses: Execute AWS CLI commands, bash scripts, Python scripts locally
+  - Server uses: (Future) Execute validation scripts, test playbooks
+  - Pure Rust crate with Tokio + streaming, no framework dependencies
+
+- **Estate Scanner** (estate-scanner crate):
+  - Client uses: Scan local AWS accounts and populate Qdrant
+  - Server uses: Not used (server has no AWS credentials)
+  - Thin orchestrator over Execution Engine + Storage Service
+
+- **Common Types** (cloudops-common crate):
+  - Shared data structures: AWSResource, IAMPermissions, UserContext, etc.
+  - Zero framework dependencies, just serde + chrono
+  - Used by all other crates for type safety
+
+- **Playbook Service** (playbook-service crate):
+  - Client uses: Manage local playbooks with full scripts (encrypted in Qdrant)
+  - Server uses: Not used (server has Playbook Agent instead)
+  - Storage strategy: local_only, uploaded_for_review, uploaded_trusted, using_default
+
+**Key Insight**: Same Rust code, different deployment contexts. Client has full data + encryption, server has metadata + S3 references.
+
 ### Server Agent System
+- **Playbook Agent**: LLM + RAG intelligent playbook search and recommendation
+  - **4-Step Intelligence Flow**: LLM Intent Understanding → RAG Vector Search → LLM Ranking & Reasoning → Package & Return
+  - **Server-Side RAG**: Embedded Qdrant with `escher_library` (global) and `tenant_{id}_playbooks` (per-tenant) collections
+  - **LLM Integration**: Uses Claude/GPT for intent parsing and intelligent ranking with explanations
+  - **Playbook Lifecycle**: 10 status values (draft, ready, active, deprecated, archived, pending_review, approved, rejected, broken, needs_update)
+  - **Storage Strategy**: Metadata + S3 paths in RAG, full scripts in S3 (escher-library and escher-tenant-data buckets)
+  - **Review Workflow**: User uploads → pending_review → approved/rejected → active (with state transitions)
+  - **What's in RAG**: Metadata (name, description, keywords, status, execution stats) + S3 script paths (NOT full scripts)
 - **Classification Agent**: Intent recognition and routing
 - **Operations Agent**: Script generation from playbooks
 - **Validation Agent**: Feasibility and safety checks
