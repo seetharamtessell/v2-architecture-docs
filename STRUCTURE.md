@@ -1,84 +1,130 @@
 # Documentation Structure
 
-## Root Level
-- [README.md](README.md) - Project overview and purpose
-- [CLAUDE.md](CLAUDE.md) - AI assistant guidance
-- [STRUCTURE.md](STRUCTURE.md) - This file
+## Root Level Files
+- [README.md](README.md) - Project overview and getting started
+- [CLAUDE.md](CLAUDE.md) - AI assistant guidance for working with this repository
+- **[PROJECT-SUMMARY.md](PROJECT-SUMMARY.md)** - Complete project summary (998 lines, comprehensive overview)
+- [STRUCTURE.md](STRUCTURE.md) - This file (documentation organization)
+
+---
+
+## Main Documentation (`docs/`)
+
+### 01-overview/
+High-level architecture and product vision:
+- **[PRODUCT-VISION.md](docs/01-overview/PRODUCT-VISION.md)** - Complete product vision with deployment models
+- [architecture.md](docs/01-overview/architecture.md) - Multi-cloud architecture overview
+- [system-overview.md](docs/01-overview/system-overview.md) - System overview for stakeholders
+- [technology-stack.md](docs/01-overview/technology-stack.md) - Technology decisions
+- [key-decisions.md](docs/01-overview/key-decisions.md) - Architecture Decision Records
+
+### 02-client/
+Client application (Tauri desktop app):
+- [overview.md](docs/02-client/overview.md) - Client architecture overview
+- **[CLIENT-SUMMARY.md](docs/02-client/CLIENT-SUMMARY.md)** - Complete client architecture summary
+
+#### Frontend (`docs/02-client/frontend/`)
+React + TypeScript MVC architecture
+
+#### Tauri Integration (`docs/02-client/tauri-integration/`)
+IPC bridge: Tauri commands (70+) and events (15+)
+
+#### UI Team Implementation (`docs/02-client/ui-team-implementation/`)
+**Complete parallel development guide** (~22,700 lines, 6 files)
+
+### 03-server/
+Server architecture (stateless AI system):
+- **[agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md)** - ✅ Complete (~2,227 lines)
+  - LLM + RAG intelligence with 4-step flow
+  - 10 playbook lifecycle states
+
+### 04-services/
+**Shared Rust crates** used by both client and server:
+- **storage-service** - ✅ Complete (~4,000 lines, 10 files) - RAG + Qdrant
+- **execution-engine** - ✅ Complete (~6,000 lines) - Command execution
+- **estate-scanner** - ✅ Complete (~3,000 lines) - Resource discovery
+- **common** - ✅ Complete (~650 lines) - Shared data structures
+- **playbook-service** - ✅ Complete - Playbook management
+
+### 05-flows/, 06-security/, 07-data/, 08-operations/
+Additional documentation sections
+
+---
 
 ## Working Documents (`working-docs/`)
-Active design documents being worked on:
-- [CLIENT-DESIGN-WORKING-DOC-V2.md](working-docs/CLIENT-DESIGN-WORKING-DOC-V2.md) - Storage Service design (latest)
-- [CLIENT-MODULE-ARCHITECTURE.md](working-docs/CLIENT-MODULE-ARCHITECTURE.md) - Module architecture overview
-- [DOCS-STRUCTURE.md](working-docs/DOCS-STRUCTURE.md) - Documentation organization plan
+Active design documents and completed fix records:
+- **[CRITICAL-FIXES-2025-10-15-COMPLETED.md](working-docs/CRITICAL-FIXES-2025-10-15-COMPLETED.md)** - Record of 61 fixes
+
+---
+
+## Archive (`archive/`)
+Resolved gap analyses:
+- **[GAP-ANALYSIS-2025-10-14-RESOLVED.md](archive/GAP-ANALYSIS-2025-10-14-RESOLVED.md)** - All critical issues resolved
+
+---
 
 ## Reference Material (`reference/`)
-Reference implementations and comparisons:
-- [CONTEXT-MANAGEMENT-ARCHITECTURE.md](reference/CONTEXT-MANAGEMENT-ARCHITECTURE.md) - Node.js reference implementation
-- [COMPARISON-NODE-VS-RUST-STORAGE.md](reference/COMPARISON-NODE-VS-RUST-STORAGE.md) - Rust vs Node.js comparison
-
-## Architecture Documentation (`docs/`)
-
-### 01-overview
-High-level architecture and decisions:
-- [architecture.md](docs/01-overview/architecture.md) - Original 10,000-foot architecture
-- [system-overview.md](docs/01-overview/system-overview.md)
-- [technology-stack.md](docs/01-overview/technology-stack.md)
-- [key-decisions.md](docs/01-overview/key-decisions.md)
-
-### 02-client
-Client application documentation:
-- [overview.md](docs/02-client/overview.md) - Client overview
-
-#### Modules (`docs/02-client/modules/`)
-- [overview.md](docs/02-client/modules/overview.md) - Module architecture
-
-**Storage Service** (✅ Design in progress):
-- [README.md](docs/02-client/modules/storage-service/README.md)
-
-**Execution Engine** (🔄 To be designed):
-- [README.md](docs/02-client/modules/execution-engine/README.md)
-- [architecture.md](docs/02-client/modules/execution-engine/architecture.md)
-- [api.md](docs/02-client/modules/execution-engine/api.md)
-
-**Estate Scanner** (🔄 To be designed):
-- [README.md](docs/02-client/modules/estate-scanner/README.md)
-
-**Request Builder** (🔄 To be designed):
-- [README.md](docs/02-client/modules/request-builder/README.md)
-
-### 03-server
-Server documentation:
-- [overview.md](docs/03-server/overview.md)
-- [agents/overview.md](docs/03-server/agents/overview.md)
-- [microservices/overview.md](docs/03-server/microservices/overview.md)
+Reference implementations and comparisons
 
 ## Architecture Decision Records (`adr/`)
-- [README.md](adr/README.md)
-- [template.md](adr/template.md)
+ADR templates and records
 
 ## Diagrams (`diagrams/`)
-- [README.md](diagrams/README.md)
-- `components/` - Component diagrams
-- `flows/` - Flow diagrams
-- `system/` - System diagrams
-- `source/` - Diagram source files
+System, component, and flow diagrams
 
 ## Repositories (`repositories/`)
-- [repos.md](repositories/repos.md) - Related repository links
+Related repository links
 
-## Design Status
+---
 
-| Module | Status | Working Doc | Architecture Doc |
-|--------|--------|-------------|------------------|
-| Storage Service | 🟡 In Progress | [Link](working-docs/CLIENT-DESIGN-WORKING-DOC-V2.md) | TBD |
-| Execution Engine | ⚪ Not Started | TBD | [Link](docs/02-client/modules/execution-engine/architecture.md) |
-| Estate Scanner | ⚪ Not Started | TBD | TBD |
-| Request Builder | ⚪ Not Started | TBD | TBD |
+## Documentation Status
 
-## Next Steps
+### ✅ Complete (90%)
+- Product Vision (3 files, ~1,500 lines)
+- Client Frontend (25+ files, ~25,000 lines)
+- UI Implementation Guide (6 files, ~22,700 lines)
+- Shared Services (28 files, ~13,650 lines)
+- Server: Playbook Agent (1 file, ~2,227 lines)
+- PROJECT-SUMMARY (1 file, ~998 lines)
 
-1. Complete Storage Service design in working doc
-2. Move finalized design to `docs/02-client/modules/storage-service/`
-3. Start Estate Scanner design
-4. Start Request Builder design
-5. Keep Execution Engine on hold until needed
+**Total**: 57+ files, 42,377+ lines documented
+
+### 🔄 In Progress
+- Server: Classification, Operations, Validation, Risk Assessment agents
+- Client: Request Builder module
+
+---
+
+## Key Architecture Highlights
+
+### 6 RAG Collections (Client-Side)
+1. Cloud Estate Inventory (multi-cloud: AWS/Azure/GCP)
+2. Chat History
+3. Executed Operations
+4. Immutable Reports
+5. Alerts & Events
+6. User Playbooks
+
+### Multi-Cloud Architecture
+- **Product**: Escher Multi-Cloud Operations Platform
+- **Clouds**: AWS, Azure, GCP
+- **Naming**: `cloud_estate` (not `aws_estate`)
+
+### Deployment Options
+1. Run on Your Laptop - Local-only
+2. Extend to Your Cloud - 24/7 automation
+
+---
+
+## Quick Start for New Contributors
+
+1. **Start Here**: [PROJECT-SUMMARY.md](PROJECT-SUMMARY.md)
+2. **Product Vision**: [PRODUCT-VISION.md](docs/01-overview/PRODUCT-VISION.md)
+3. **Client Architecture**: [CLIENT-SUMMARY.md](docs/02-client/CLIENT-SUMMARY.md)
+4. **UI Development**: [ui-team-implementation/](docs/02-client/ui-team-implementation/)
+5. **Shared Services**: [docs/04-services/](docs/04-services/)
+
+---
+
+**Last Updated**: October 15, 2025
+**Status**: 90% complete. All critical inconsistencies resolved. Ready for stakeholder review.
