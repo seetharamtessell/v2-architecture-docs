@@ -311,7 +311,7 @@ impl EstateStorage {
 use cloudops_common::aws::{AWSResource, IAMPermissions, UserContext, ResourceConstraints};
 
 // AWSResource - Complete AWS resource representation
-// See: https://docs/02-client/modules/common/README.md#awsresource
+// See: https://docs/04-services/common/README.md#awsresource
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AWSResource {
@@ -332,7 +332,7 @@ pub struct AWSResource {
 }
 
 // IAMPermissions - Per-resource IAM permissions
-// See: https://docs/02-client/modules/common/README.md#iampermissions
+// See: https://docs/04-services/common/README.md#iampermissions
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IAMPermissions {
@@ -347,7 +347,7 @@ pub struct IAMPermissions {
 }
 
 // UserContext - AWS user/role context
-// See: https://docs/02-client/modules/common/README.md#usercontext
+// See: https://docs/04-services/common/README.md#usercontext
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserContext {
@@ -362,7 +362,7 @@ pub struct UserContext {
 }
 
 // ResourceConstraints - Operational constraints
-// See: https://docs/02-client/modules/common/README.md#resourceconstraints
+// See: https://docs/04-services/common/README.md#resourceconstraints
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceConstraints {

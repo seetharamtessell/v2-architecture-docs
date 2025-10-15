@@ -70,7 +70,7 @@ fn default_cleanup_stale() -> bool {
 use cloudops_common::aws::Account;
 
 // Account is defined in cloudops-common/src/aws.rs
-// See: docs/02-client/modules/common/README.md#account
+// See: docs/04-services/common/README.md#account
 ```
 
 ### ScanResult
@@ -252,7 +252,7 @@ impl Default for ScanConfig {
 use cloudops_common::config::EmbeddingModelConfig;
 
 // EmbeddingModelConfig is defined in cloudops-common/src/config.rs
-// See: docs/02-client/modules/common/README.md#embeddingmodelconfig
+// See: docs/04-services/common/README.md#embeddingmodelconfig
 ```
 
 ### RetryConfig
@@ -263,7 +263,7 @@ use cloudops_common::config::EmbeddingModelConfig;
 use cloudops_common::config::RetryConfig;
 
 // RetryConfig is defined in cloudops-common/src/config.rs
-// See: docs/02-client/modules/common/README.md#retryconfig
+// See: docs/04-services/common/README.md#retryconfig
 ```
 
 ---
@@ -474,7 +474,7 @@ impl ScanError {
 use cloudops_common::error::ErrorCategory;
 
 // ErrorCategory is defined in cloudops-common/src/error.rs
-// See: docs/02-client/modules/common/README.md#errorcategory
+// See: docs/04-services/common/README.md#errorcategory
 ```
 
 ### Result Type Alias

@@ -13,7 +13,7 @@
 - Error codes and handling
 
 ### Storage Schemas
-- Qdrant collection schemas (see [Storage Service](../02-client/modules/storage-service/collections.md))
+- Qdrant collection schemas (see [Storage Service](../04-services/storage-service/collections.md))
 - Chat message structure
 - AWS resource structure
 

@@ -4,32 +4,35 @@ Detailed schemas for Qdrant collections used by the Storage Service.
 
 ## Overview
 
-**Target Architecture**: The Storage Service will support **5 RAG collections** as defined in the PRODUCT-VISION:
+**Target Architecture**: The Storage Service will support **6 RAG collections**:
 
 1. **Cloud Estate Inventory** - Multi-cloud resource metadata (AWS, Azure, GCP)
 2. **Chat History** - Conversational history with AI
 3. **Executed Operations** - History of operations executed
 4. **Immutable Reports** - Cost reports, audit logs, compliance reports
 5. **Alerts & Events** - Alert rules, alert history, scan results, morning reports
+6. **User Playbooks** - User's custom playbooks with full scripts (NEW)
 
 **Current Implementation Status** (Phase 1):
 - ✅ **chat_history** - Stores conversation messages (no vector search needed)
 - ✅ **cloud_estate** - Stores multi-cloud resources (with semantic search)
+- 🚧 **user_playbooks** - User's custom playbooks (managed by Playbook Service)
 - 🚧 **Executed Operations, Immutable Reports, Alerts & Events** - To be implemented
 
 This document describes the **currently implemented collections** (Phase 1). Additional collections will be added as the storage service evolves.
 
 ## Collection Comparison
 
-| Aspect | chat_history | cloud_estate |
-|--------|-------------|------------|
-| **Purpose** | Store conversation messages | Store multi-cloud resource metadata (AWS/Azure/GCP) |
-| **Vector Search** | No (dummy vectors) | Yes (semantic search) |
-| **Vector Size** | 1 dimension | 384/768/1536 (model-dependent) |
-| **Access Pattern** | Filter by context_id | Vector search + filters |
-| **Encryption** | Encrypted content | Encrypted metadata |
-| **Point ID** | Random UUID | Deterministic (account-region-id) |
-| **Update Pattern** | Immutable (append-only) | Mutable (upsert) |
+| Aspect | chat_history | cloud_estate | user_playbooks |
+|--------|-------------|------------|----------------|
+| **Purpose** | Store conversation messages | Store multi-cloud resource metadata | Store user's custom playbooks |
+| **Vector Search** | No (dummy vectors) | Yes (semantic search) | Yes (semantic search) |
+| **Vector Size** | 1 dimension | 384/768/1536 | 384 (sentence-transformers) |
+| **Access Pattern** | Filter by context_id | Vector search + filters | Vector search + filters |
+| **Encryption** | Encrypted content | Encrypted metadata | Encrypted full playbook |
+| **Point ID** | Random UUID | Deterministic (account-region-id) | Deterministic (playbook-version) |
+| **Update Pattern** | Immutable (append-only) | Mutable (upsert) | Mutable (upsert) |
+| **Managed By** | Storage Service | Storage Service | Playbook Service |
 
 ## Chat History Collection
 
@@ -522,6 +525,358 @@ let stale_ids: Vec<_> = existing_ids
 
 if !stale_ids.is_empty() {
     qdrant.delete_points("aws_estate", &stale_ids).await?;
+}
+```
+
+## User Playbooks Collection
+
+### Design Rationale
+
+The user_playbooks collection stores user's custom playbooks with full scripts:
+- Semantic search over playbook descriptions and use cases
+- Full playbook data stored (metadata + scripts) for offline operation
+- Encrypted sensitive data (scripts may contain proprietary logic)
+- Managed by Playbook Service (not Storage Service directly)
+
+### Schema
+
+```rust
+CollectionConfig {
+    name: "user_playbooks".to_string(),
+    vector_size: 384, // sentence-transformers embedding
+    distance: DistanceMetric::Cosine,
+    indexed_fields: vec![
+        IndexedField {
+            name: "playbook_id".to_string(),
+            field_type: IndexFieldType::Keyword,
+            indexed: true,
+        },
+        IndexedField {
+            name: "version".to_string(),
+            field_type: IndexFieldType::Keyword,
+            indexed: true,
+        },
+        IndexedField {
+            name: "storage_strategy".to_string(),
+            field_type: IndexFieldType::Keyword,
+            indexed: true,
+        },
+        IndexedField {
+            name: "cloud_provider".to_string(),
+            field_type: IndexFieldType::Keyword,
+            indexed: true,
+        },
+        IndexedField {
+            name: "author".to_string(),
+            field_type: IndexFieldType::Keyword,
+            indexed: true,
+        },
+        IndexedField {
+            name: "status".to_string(),
+            field_type: IndexFieldType::Keyword,
+            indexed: true,
+        },
+        IndexedField {
+            name: "created_at".to_string(),
+            field_type: IndexFieldType::Integer,
+            indexed: true,
+        },
+    ],
+    hnsw_config: Some(HnswConfig {
+        m: 16,
+        ef_construct: 100,
+        full_scan_threshold: 1000,
+    }),
+}
+```
+
+### Point Structure
+
+```json
+{
+  "id": "user-weekend-shutdown-v1.2.0",
+  "vector": [0.234, -0.567, 0.891, ...],
+  "payload": {
+    // ✅ PLAIN TEXT (for filtering and search hints)
+    "playbook_id": "user-weekend-shutdown",
+    "version": "1.2.0",
+    "name": "Weekend DB Shutdown",
+    "description": "Custom workflow for stopping prod DB over weekend to save costs",
+    "keywords": ["production", "database", "rds", "cost-saving", "weekend"],
+    "cloud_provider": ["aws"],
+    "resource_types": ["rds::instance"],
+
+    // Storage strategy
+    "storage_strategy": "uploaded_for_review",  // or "local_only", "uploaded_trusted", "using_default"
+    "author": "user_custom",  // or "ai_generated"
+
+    // Lifecycle status
+    "status": "active",  // draft, ready, active, deprecated, archived, pending_review, approved, rejected, broken, needs_update
+
+    // Metadata
+    "created_at": 1726329600,
+    "updated_at": 1728391162,
+    "execution_count": 12,
+    "success_count": 12,
+    "last_executed": 1728304800,
+    "deprecated_by": null,  // playbook_id of newer version (if deprecated)
+    "deprecation_reason": null,  // "Use v2.0.0 with improved error handling"
+
+    // Relationship to Escher Library
+    "based_on_escher": true,
+    "escher_playbook_id": "aws-rds-stop",
+    "escher_version": "1.0.0",
+
+    // ✅ ENCRYPTED (full playbook including scripts)
+    "encrypted_data": "xK9mP2vL8nQ5...base64..."
+
+    // After decryption, encrypted_data contains:
+    // {
+    //   "metadata": { ... full metadata.json ... },
+    //   "execution_formats": {
+    //     "shell": {
+    //       "content": "#!/bin/bash\n...",
+    //       "size_bytes": 4096,
+    //       "checksum": "sha256:abc123..."
+    //     },
+    //     "python": {
+    //       "content": "import boto3\n...",
+    //       "size_bytes": 5120,
+    //       "checksum": "sha256:def456..."
+    //     }
+    //   },
+    //   "explain_plan": { ... detailed explain plan ... },
+    //   "parameters": [ ... parameter definitions with auto_fill strategies ... ]
+    // }
+  }
+}
+```
+
+### Payload Fields
+
+#### Plain Text (Indexed)
+
+| Field | Type | Purpose | Indexed |
+|-------|------|---------|---------|
+| `playbook_id` | Keyword | Unique playbook identifier | Yes |
+| `version` | Keyword | Semantic version (v1.0.0) | Yes |
+| `status` | Keyword | Playbook lifecycle status | Yes |
+| `name` | Keyword | User-facing playbook name | No |
+| `description` | Text | Rich description (used in embedding) | No |
+| `keywords` | Array | Search keywords | No |
+| `cloud_provider` | Array | ["aws", "azure", "gcp"] | Yes |
+| `resource_types` | Array | Target resource types | No |
+| `storage_strategy` | Keyword | How playbook is stored/synced | Yes |
+| `author` | Keyword | "user_custom" or "ai_generated" | Yes |
+| `created_at` | Integer | Creation timestamp | Yes |
+| `execution_count` | Integer | Times executed | No |
+| `last_executed` | Integer | Last execution timestamp | No |
+
+#### Encrypted
+
+| Field | Type | Content |
+|-------|------|---------|
+| `encrypted_data` | String | Base64-encoded encrypted full playbook |
+
+**Encrypted Data Structure** (Full Playbook):
+```json
+{
+  "metadata": {
+    "playbook_id": "user-weekend-shutdown",
+    "version": "1.2.0",
+    "name": "Weekend DB Shutdown",
+    "description": "...",
+    "purpose": "Cost optimization during low-traffic weekends",
+    "use_cases": [
+      "Weekend database shutdown",
+      "Planned maintenance windows",
+      "Cost reduction strategies"
+    ]
+  },
+  "parameters": [
+    {
+      "name": "instance_id",
+      "type": "string",
+      "description": "RDS instance identifier",
+      "required": true,
+      "auto_fill_strategy": {
+        "source": "user_estate",
+        "estate_query": {
+          "resource_type": "rds::instance",
+          "filters": {"tags.environment": "production"}
+        }
+      }
+    }
+  ],
+  "execution_formats": {
+    "shell": {
+      "content": "#!/bin/bash\n# Full shell script content...",
+      "size_bytes": 4096,
+      "checksum": "sha256:abc123..."
+    },
+    "python": {
+      "content": "import boto3\n# Full Python script...",
+      "size_bytes": 5120,
+      "checksum": "sha256:def456..."
+    }
+  },
+  "explain_plan": {
+    "what_it_does": "Creates snapshot, stops RDS instance",
+    "why_use_it": ["Save costs", "Prevent data loss"],
+    "what_happens": [ /* step-by-step details */ ],
+    "estimated_impact": {
+      "downtime_minutes": 10,
+      "cost_savings_monthly": 120
+    }
+  }
+}
+```
+
+### Point ID Strategy
+
+**Deterministic ID** - Playbooks can be updated (new versions).
+
+```rust
+// Generate deterministic ID
+fn generate_playbook_id(playbook_id: &str, version: &str) -> String {
+    format!("{}-{}", playbook_id, version)
+}
+
+// Example: "user-weekend-shutdown-v1.2.0"
+```
+
+**Benefits:**
+- Same playbook version = same point ID
+- Different versions = different points (version history)
+- Upsert updates existing version
+- Easy to query latest version
+
+### Vector Embedding
+
+#### What Gets Embedded
+
+```rust
+fn generate_embedding_text(playbook: &Playbook) -> String {
+    format!(
+        "{} {} {} {}",
+        playbook.name,
+        playbook.description,
+        playbook.use_cases.join(" "),
+        playbook.keywords.join(" ")
+    )
+}
+
+// Example result:
+// "Weekend DB Shutdown Custom workflow for stopping prod DB over weekend to save costs Weekend database shutdown Planned maintenance windows Cost reduction strategies production database rds cost-saving weekend"
+```
+
+### Access Patterns
+
+#### 1. Semantic Search
+
+```rust
+// User query: "stop production database for weekend"
+let vector = embedder.embed("stop production database for weekend").await?;
+
+let results = qdrant.search_points(SearchPoints {
+    collection_name: "user_playbooks".to_string(),
+    vector,
+    filter: Some(Filter {
+        must: vec![
+            Condition::matches("cloud_provider", "aws"),
+            Condition::matches("author", "user_custom"),
+        ],
+    }),
+    limit: 10,
+    with_payload: Some(WithPayloadSelector::enable(true)),
+}).await?;
+```
+
+#### 2. Get Latest Version
+
+```rust
+// Get latest version of a specific playbook
+let results = qdrant.scroll(Scroll {
+    collection_name: "user_playbooks".to_string(),
+    filter: Some(Filter {
+        must: vec![
+            Condition::matches("playbook_id", "user-weekend-shutdown"),
+        ],
+    }),
+    order_by: Some(OrderBy {
+        key: "created_at".to_string(),
+        direction: Some(Direction::Desc),
+    }),
+    limit: Some(1),
+    with_payload: Some(WithPayloadSelector::enable(true)),
+}).await?;
+```
+
+#### 3. Filter by Storage Strategy
+
+```rust
+// Get all playbooks uploaded to server
+let results = qdrant.scroll(Scroll {
+    collection_name: "user_playbooks".to_string(),
+    filter: Some(Filter {
+        must: vec![
+            Condition::matches("storage_strategy", "uploaded_for_review"),
+        ],
+    }),
+    limit: Some(1000),
+    with_payload: Some(WithPayloadSelector::enable(true)),
+}).await?;
+```
+
+#### 4. Filter by Author
+
+```rust
+// Get all AI-generated playbooks
+let results = qdrant.scroll(Scroll {
+    collection_name: "user_playbooks".to_string(),
+    filter: Some(Filter {
+        must: vec![
+            Condition::matches("author", "ai_generated"),
+        ],
+    }),
+    limit: Some(100),
+    with_payload: Some(WithPayloadSelector::enable(true)),
+}).await?;
+```
+
+### Managed By Playbook Service
+
+**Important**: This collection is managed by `escher-playbook-service`, not directly by Storage Service:
+
+```rust
+// Playbook Service handles all operations on user_playbooks
+pub struct PlaybookService {
+    storage: Arc<StorageService>,  // Access to Qdrant
+}
+
+impl PlaybookService {
+    pub async fn add_to_rag(&self, playbook: &Playbook) -> Result<()> {
+        // Generate embedding
+        let vector = self.embedder.embed(&playbook.generate_embedding_text()).await?;
+
+        // Encrypt full playbook
+        let encrypted_data = self.encrypt_playbook(playbook).await?;
+
+        // Upsert to user_playbooks collection
+        self.storage.upsert_point(
+            "user_playbooks",
+            generate_playbook_id(&playbook.id, &playbook.version),
+            vector,
+            PlaybookPayload {
+                playbook_id: playbook.id.clone(),
+                version: playbook.version.clone(),
+                // ... other fields ...
+                encrypted_data,
+            }
+        ).await?;
+
+        Ok(())
+    }
 }
 ```
 
