@@ -550,20 +550,20 @@ pub enum SnapshotLocation {
 
 ```rust
 // Create snapshot
-let snapshot = storage.backup.create_snapshot("aws_estate").await?;
+let snapshot = storage.backup.create_snapshot("cloud_estate").await?;
 println!("Created snapshot: {}", snapshot.name);
 
 // Upload to S3 (if configured)
 storage.backup.upload_to_s3(&snapshot).await?;
 
 // List available snapshots
-let snapshots = storage.backup.list_snapshots("aws_estate").await?;
+let snapshots = storage.backup.list_snapshots("cloud_estate").await?;
 for snap in snapshots {
     println!("{}: {} bytes", snap.name, snap.size_bytes);
 }
 
 // Restore from S3
-storage.backup.restore_from_s3("aws_estate", "2025-10-08").await?;
+storage.backup.restore_from_s3("cloud_estate", "2025-10-08").await?;
 
 // Start automatic backups
 storage.backup.start_auto_backup().await?;

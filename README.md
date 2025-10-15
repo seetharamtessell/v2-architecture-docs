@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository maintains the **complete architecture documentation** for the AWS CloudOps AI Agent system (V2). It serves as the **single source of truth** for architectural decisions, component designs, and related repositories across the entire project ecosystem.
+This repository maintains the **complete architecture documentation** for the Escher Multi-Cloud Operations Platform (V2). It serves as the **single source of truth** for architectural decisions, component designs, and related repositories across the entire project ecosystem.
 
 ## Scope
 
@@ -18,7 +18,7 @@ This is a **10,000-foot view** documentation project that covers:
 
 ## Key Architecture Principles
 
-1. **Client-side AWS Estate Management**: All AWS resource data and credentials remain local
+1. **Client-side Multi-Cloud Estate Management**: All cloud resource data (AWS/Azure/GCP) and credentials remain local
 2. **Server-side Operations Knowledge**: Stateless server provides playbook execution logic
 3. **Privacy First**: No AWS credentials or estate data sent to server
 4. **Semantic Search**: Local Qdrant vector DB enables fast, fuzzy resource lookup

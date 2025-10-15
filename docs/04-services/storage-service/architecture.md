@@ -6,7 +6,7 @@
 
 ## Overview
 
-The Storage Service is a pure Rust crate that provides a unified storage layer for the CloudOps client application. It handles both chat history and AWS estate data using Qdrant as the underlying vector database, with application-level encryption and automated S3 backup.
+The Storage Service is a pure Rust crate that provides a unified storage layer for the CloudOps client application. It handles both chat history and cloud estate data using Qdrant as the underlying vector database, with application-level encryption and automated S3 backup.
 
 ## Design Goals
 
@@ -45,7 +45,7 @@ The Storage Service is a pure Rust crate that provides a unified storage layer f
 │        Qdrant (Embedded, Filesystem)                    │
 │  Collections:                                           │
 │  ├─ chat_history (vector_size: 1, dummy vectors)       │
-│  └─ aws_estate (vector_size: 384, real embeddings)     │
+│  └─ cloud_estate (vector_size: 384, real embeddings)     │
 │                                                         │
 │  Storage: ~/.cloudops/data/qdrant/                     │
 │  WAL: Enabled                                          │
@@ -206,7 +206,7 @@ EstateStorage.upsert_resource(resource)
 2. Generate embedding (via configured provider)
 3. Encrypt sensitive metadata
 4. Create Point with real vector
-5. Upsert to Qdrant (collection: aws_estate)
+5. Upsert to Qdrant (collection: cloud_estate)
     ↓
 Qdrant stores/updates point (upsert is idempotent)
 ```
@@ -249,7 +249,7 @@ Backup complete (non-blocking)
 
 **Different Access Patterns**:
 
-| Aspect | Chat History | AWS Estate |
+| Aspect | Chat History | Cloud Estate |
 |--------|-------------|------------|
 | Search | Filter-only | Vector + Filter |
 | Vectors | Dummy (1D) | Real (384D) |
@@ -313,7 +313,7 @@ QdrantConfig {
 │   │   │   │   ├── storage/       # Point data
 │   │   │   │   ├── wal/           # Write-ahead log
 │   │   │   │   └── payload_index/ # Indexed fields
-│   │   │   └── aws_estate/
+│   │   │   └── cloud_estate/
 │   │   │       ├── storage/
 │   │   │       ├── wal/
 │   │   │       └── payload_index/
@@ -321,7 +321,7 @@ QdrantConfig {
 │   └── temp/                      # Temp files (restore, etc.)
 └── snapshots/                     # Local snapshots
     ├── chat_history_2025-10-08.snapshot
-    └── aws_estate_2025-10-08.snapshot
+    └── cloud_estate_2025-10-08.snapshot
 ```
 
 **S3 Layout**:
@@ -332,7 +332,7 @@ s3://backup-bucket/
         ├── chat_history/
         │   ├── 2025-10-08.snapshot
         │   └── 2025-10-07.snapshot
-        └── aws_estate/
+        └── cloud_estate/
             ├── 2025-10-08.snapshot
             └── 2025-10-07.snapshot
 ```
@@ -371,7 +371,7 @@ s3://backup-bucket/
 - Storage: ~50-100 MB
 - Performance: No degradation
 
-**AWS Estate**:
+**Cloud Estate**:
 - 10,000 resources
 - Storage: ~100-200 MB (with vectors)
 - Performance: <50ms search

@@ -233,7 +233,7 @@ restore_from_s3(collection, date) -> Result<()>
 
 **Collection Strategy**:
 - **chat_history**: 1D dummy vectors, filter-based access, immutable messages
-- **aws_estate**: 384D real vectors, semantic search + filters, deterministic point IDs
+- **cloud_estate**: 384D real vectors, semantic search + filters, deterministic point IDs
 
 **Documentation** (9 files):
 - [README](modules/storage-service/README.md) - Overview

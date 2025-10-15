@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is the **v2-architecture-docs** repository - the single source of truth for architectural documentation of the AWS CloudOps AI Agent system (V2). This is a **10,000-foot view documentation project**, not an implementation repository.
+This is the **v2-architecture-docs** repository - the single source of truth for architectural documentation of the Escher Multi-Cloud Operations Platform (V2). This is a **10,000-foot view documentation project**, not an implementation repository.
 
 ## Key Principles
 

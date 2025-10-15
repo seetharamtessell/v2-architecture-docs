@@ -83,8 +83,8 @@ let config = StorageConfig {
             ],
             hnsw_config: None,
         },
-        aws_estate: CollectionConfig {
-            name: "aws_estate".to_string(),
+        cloud_estate: CollectionConfig {
+            name: "cloud_estate".to_string(),
             vector_size: 384,
             distance: DistanceMetric::Cosine,
             indexed_fields: vec![
@@ -359,7 +359,7 @@ EmbeddingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionConfigs {
     pub chat_history: CollectionConfig,
-    pub aws_estate: CollectionConfig,
+    pub cloud_estate: CollectionConfig,
 }
 ```
 
@@ -491,11 +491,11 @@ CollectionConfig {
 }
 ```
 
-### Example: AWS Estate Collection
+### Example: Cloud Estate Collection
 
 ```rust
 CollectionConfig {
-    name: "aws_estate".to_string(),
+    name: "cloud_estate".to_string(),
     vector_size: 384, // Match embedding dimension
     distance: DistanceMetric::Cosine,
     indexed_fields: vec![
@@ -738,7 +738,7 @@ impl StorageConfig {
         }
 
         // Check embedding dimension matches collection config
-        if self.embedding.dimension != self.collections.aws_estate.vector_size {
+        if self.embedding.dimension != self.collections.cloud_estate.vector_size {
             return Err(ConfigError::DimensionMismatch);
         }
 

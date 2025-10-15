@@ -32,7 +32,7 @@
 │  │  LOCAL STORAGE LAYER (Vector Store)                       │    │
 │  │                                                            │    │
 │  │  ┌──────────────────┐  ┌──────────────────────────────┐  │    │
-│  │  │ Qdrant           │  │ 5 RAG Collections:           │  │    │
+│  │  │ Qdrant           │  │ 6 RAG Collections:           │  │    │
 │  │  │ (Vector DB)      │  │                              │  │    │
 │  │  │                  │  │ 1. Cloud Estate Inventory    │  │    │
 │  │  │ Multi-Cloud      │  │    AWS, Azure, GCP resources │  │    │
@@ -47,8 +47,10 @@
 │  │  │ • Names, Tags    │  │    Cost, audit, compliance   │  │    │
 │  │  │ • Cloud Provider │  │                              │  │    │
 │  │  │ • Resource Type  │  │ 5. Alerts & Events           │  │    │
-│  │  │ • IDs, ARNs      │  │    Alert rules, history,     │  │    │
-│  │  │                  │  │    morning reports           │  │    │
+│  │  │ • IDs, ARNs      │  │    Alert rules, history      │  │    │
+│  │  │                  │  │                              │  │    │
+│  │  │                  │  │ 6. User Playbooks            │  │    │
+│  │  │                  │  │    Custom playbooks          │  │    │
 │  │  └──────────────────┘  └──────────────────────────────┘  │    │
 │  └────────────────────────────────────────────────────────────┘    │
 │                          ↕                                          │
@@ -181,7 +183,7 @@ Display in unified table with cloud provider column
 
 ---
 
-### **4. Vector Store Architecture (5 Collections)**
+### **4. Vector Store Architecture (6 Collections)**
 
 **Purpose**: Fast semantic search across multi-cloud resources
 
@@ -229,6 +231,12 @@ Display in unified table with cloud provider column
 - Morning report data
 - Auto-remediation settings
 
+#### **Collection 6: User Playbooks**
+- User's custom playbooks with full scripts
+- Encrypted content (AES-256-GCM)
+- Storage strategies: local_only, uploaded_for_review, uploaded_trusted, using_default
+- Managed by Playbook Service crate
+
 **Storage Location**:
 - **Run on Laptop**: Local Qdrant + hourly backups to YOUR S3/Blob/GCS
 - **Extend to Cloud**: Primary storage in YOUR S3/Blob/GCS (cloud-native durability)
@@ -269,10 +277,10 @@ Scheduler triggers → Container starts → Loads vector store from S3
 |--------|----------------|--------------------------|
 | **Product Name** | AWS CloudOps AI Agent | Escher |
 | **Cloud Support** | AWS only | AWS + Azure + GCP |
-| **Collections** | 2 (chat_history, aws_estate) | 5 (estate, chat, ops, reports, alerts) |
+| **Collections** | 2 (chat_history, cloud_estate) | 6 (estate, chat, ops, reports, alerts, playbooks) |
 | **Server** | Stateless | Still stateless (unchanged) |
 | **Credentials** | AWS keys | AWS + Azure + GCP |
-| **Resource Naming** | aws_estate | cloud_estate |
+| **Resource Naming** | aws_estate (AWS-only) | cloud_estate (Multi-cloud) |
 | **Deployment** | Local only | Laptop + Optional Cloud Extension |
 | **Automation** | Limited | 24/7 with Extended Runtime |
 

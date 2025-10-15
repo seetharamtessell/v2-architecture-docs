@@ -276,7 +276,7 @@ impl EstateStorage {
 
         // 4. Delete stale resources
         if !stale_ids.is_empty() {
-            self.qdrant.delete_points("aws_estate", &stale_ids).await?;
+            self.qdrant.delete_points("cloud_estate", &stale_ids).await?;
             info!("Deleted {} stale resources", stale_ids.len());
         }
 
@@ -289,7 +289,7 @@ impl EstateStorage {
 
         loop {
             let response = self.qdrant.scroll(Scroll {
-                collection_name: "aws_estate".to_string(),
+                collection_name: "cloud_estate".to_string(),
                 limit: Some(1000),
                 offset,
                 with_payload: Some(WithPayloadSelector::enable(false)),
@@ -346,7 +346,7 @@ No need to delete and recreate - upsert handles updates.
 impl StorageService {
     pub async fn health(&self) -> Result<StorageHealth> {
         let estate_count = self.qdrant
-            .count_points("aws_estate")
+            .count_points("cloud_estate")
             .await?;
 
         // Compare with expected count
@@ -386,7 +386,7 @@ impl EstateStorage {
         let mut offset = None;
         loop {
             let response = self.qdrant.scroll(Scroll {
-                collection_name: "aws_estate".to_string(),
+                collection_name: "cloud_estate".to_string(),
                 limit: Some(1000),
                 offset,
                 with_payload: Some(WithPayloadSelector::enable(true)),
@@ -439,7 +439,7 @@ impl EstateStorage {
             // Get all duplicate points
             let mut points = Vec::new();
             for id in &group.point_ids {
-                if let Some(point) = self.qdrant.get_point("aws_estate", id).await? {
+                if let Some(point) = self.qdrant.get_point("cloud_estate", id).await? {
                     points.push((id.clone(), point));
                 }
             }
@@ -458,7 +458,7 @@ impl EstateStorage {
                 .collect();
 
             if !to_delete.is_empty() {
-                self.qdrant.delete_points("aws_estate", &to_delete).await?;
+                self.qdrant.delete_points("cloud_estate", &to_delete).await?;
                 removed_count += to_delete.len();
                 info!("Removed {} duplicates for {}", to_delete.len(), group.identifier);
             }
@@ -536,11 +536,11 @@ tokio::spawn(async move {
 // Track point count trends
 let health = storage.health().await?;
 metrics::gauge!("qdrant.points.chat_history", health.chat_points as f64);
-metrics::gauge!("qdrant.points.aws_estate", health.estate_points as f64);
+metrics::gauge!("qdrant.points.cloud_estate", health.estate_points as f64);
 
 // Alert on unexpected growth
 if health.estate_points > health.expected_points * 1.2 {
-    alert!("Possible duplicate resources in aws_estate");
+    alert!("Possible duplicate resources in cloud_estate");
 }
 ```
 

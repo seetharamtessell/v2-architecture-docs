@@ -17,7 +17,7 @@ High-level overview of the Escher Multi-Cloud Operations Management Platform.
 │  Physical Laptop (Tauri App)                                │
 │  ├─ React Frontend (Multi-cloud UI)                         │
 │  ├─ Rust Backend (Execution Engine)                         │
-│  ├─ Local Vector Store (5 RAG Collections)                  │
+│  ├─ Local Vector Store (6 RAG Collections)                  │
 │  └─ Secure Credentials Store (AWS/Azure/GCP)                │
 │                                                              │
 │  Extended Runtime (Optional - User's Cloud)                 │
@@ -46,7 +46,7 @@ High-level overview of the Escher Multi-Cloud Operations Management Platform.
 ## Key Components
 
 ### **Client (Tauri App)**
-- **Local Vector Store**: 5 RAG collections for multi-cloud estate management
+- **Local Vector Store**: 6 RAG collections for multi-cloud estate management
 - **Execution Engine**: Rust-based multi-cloud CLI/SDK executor
 - **Semantic Search**: Fast natural language resource lookup
 - **Privacy-First**: Your data never leaves YOUR control

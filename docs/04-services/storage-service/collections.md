@@ -193,11 +193,11 @@ qdrant.delete_points(
 ).await?;
 ```
 
-## AWS Estate Collection
+## Cloud Estate Collection
 
 ### Design Rationale
 
-The AWS estate collection uses **real vectors** because:
+The cloud estate collection uses **real vectors** because:
 - Semantic search required ("postgres database" → RDS instances)
 - Fuzzy matching needed (typos, abbreviations)
 - Natural language queries
@@ -207,7 +207,7 @@ The AWS estate collection uses **real vectors** because:
 
 ```rust
 CollectionConfig {
-    name: "aws_estate".to_string(),
+    name: "cloud_estate".to_string(),
     vector_size: 384, // Match embedding model dimension
     distance: DistanceMetric::Cosine,
     indexed_fields: vec![
@@ -255,7 +255,7 @@ CollectionConfig {
 }
 ```
 
-### AWS Estate Hierarchy
+### Cloud Estate Hierarchy
 
 Each AWS resource contains IAM permissions for that specific resource:
 
@@ -454,7 +454,7 @@ Tags enable semantic queries like:
 let vector = embedder.embed("postgres database in production").await?;
 
 let results = qdrant.search_points(SearchPoints {
-    collection_name: "aws_estate".to_string(),
+    collection_name: "cloud_estate".to_string(),
     vector,
     filter: Some(Filter {
         must: vec![
@@ -473,7 +473,7 @@ let results = qdrant.search_points(SearchPoints {
 ```rust
 // Get all EC2 instances
 let results = qdrant.scroll(Scroll {
-    collection_name: "aws_estate".to_string(),
+    collection_name: "cloud_estate".to_string(),
     filter: Some(Filter {
         must: vec![
             Condition::matches("resource_type", "ec2_instance"),
@@ -489,7 +489,7 @@ let results = qdrant.scroll(Scroll {
 ```rust
 // Get all resources in specific account and region
 let results = qdrant.scroll(Scroll {
-    collection_name: "aws_estate".to_string(),
+    collection_name: "cloud_estate".to_string(),
     filter: Some(Filter {
         must: vec![
             Condition::matches("account_id", "123456789012"),
@@ -505,7 +505,7 @@ let results = qdrant.scroll(Scroll {
 
 ```rust
 // Get all existing point IDs
-let existing_ids = get_all_point_ids("aws_estate").await?;
+let existing_ids = get_all_point_ids("cloud_estate").await?;
 
 // Upsert current resources (create or update)
 for resource in current_resources {
@@ -524,7 +524,7 @@ let stale_ids: Vec<_> = existing_ids
     .collect();
 
 if !stale_ids.is_empty() {
-    qdrant.delete_points("aws_estate", &stale_ids).await?;
+    qdrant.delete_points("cloud_estate", &stale_ids).await?;
 }
 ```
 
@@ -925,11 +925,11 @@ let env = point.payload["tags"]["env"].as_str();
 
 ```rust
 let chat_count = qdrant.count_points("chat_history").await?;
-let estate_count = qdrant.count_points("aws_estate").await?;
+let estate_count = qdrant.count_points("cloud_estate").await?;
 
 // Alert if unexpected growth
 if estate_count > expected_resource_count * 2 {
-    warn!("Possible duplicate resources in aws_estate: {}", estate_count);
+    warn!("Possible duplicate resources in cloud_estate: {}", estate_count);
 }
 ```
 
@@ -955,14 +955,14 @@ qdrant.delete_points(
 ).await?;
 ```
 
-#### AWS Estate
+#### Cloud Estate
 
 ```rust
 // Delete resources not synced in 7 days (likely deleted from AWS)
 let cutoff = Utc::now().timestamp() - (7 * 24 * 60 * 60);
 
 qdrant.delete_points(
-    "aws_estate",
+    "cloud_estate",
     Some(Filter {
         must: vec![
             Condition::range("last_synced", Range {
@@ -989,7 +989,7 @@ qdrant.delete_points(
 - Get conversation (100 messages): <10ms
 - Delete conversation: <100ms
 
-### AWS Estate
+### Cloud Estate
 
 - **HNSW index** - Fast vector search
 - **Indexed filters** - Combined vector + filter queries

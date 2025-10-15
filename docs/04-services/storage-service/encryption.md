@@ -384,7 +384,7 @@ impl EstateStorage {
     }
 
     pub async fn get_resource(&self, resource_id: &str) -> Result<Option<AWSResource>> {
-        let point = self.qdrant.get_point("aws_estate", resource_id).await?;
+        let point = self.qdrant.get_point("cloud_estate", resource_id).await?;
 
         if let Some(point) = point {
             // Decrypt

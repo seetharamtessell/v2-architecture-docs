@@ -123,7 +123,7 @@ impl BackupManager {
                 tokio::time::sleep(interval).await;
 
                 // Backup both collections
-                for collection in &["chat_history", "aws_estate"] {
+                for collection in &["chat_history", "cloud_estate"] {
                     match Self::backup_collection(
                         collection,
                         &qdrant,
@@ -186,7 +186,7 @@ impl BackupManager {
 ### What Happens During Auto-Backup
 
 1. **Wait** for configured interval
-2. **Create** snapshots for both collections (chat_history, aws_estate)
+2. **Create** snapshots for both collections (chat_history, cloud_estate)
 3. **Upload** to S3 (if configured)
 4. **Cleanup** old local snapshots (>7 days)
 5. **Cleanup** old S3 snapshots (>retention_days)
@@ -198,7 +198,7 @@ impl BackupManager {
 
 ```rust
 // Create snapshot for specific collection
-let snapshot = storage.backup.create_snapshot("aws_estate").await?;
+let snapshot = storage.backup.create_snapshot("cloud_estate").await?;
 println!("Snapshot created: {}", snapshot.name);
 println!("Size: {} bytes", snapshot.size_bytes);
 println!("Location: {:?}", snapshot.location);
@@ -220,8 +220,8 @@ async fn manual_backup(storage: &StorageService) -> Result<()> {
     let chat_snapshot = storage.backup.create_snapshot("chat_history").await?;
     storage.backup.upload_to_s3(&chat_snapshot).await?;
 
-    // Backup AWS estate
-    let estate_snapshot = storage.backup.create_snapshot("aws_estate").await?;
+    // Backup cloud estate
+    let estate_snapshot = storage.backup.create_snapshot("cloud_estate").await?;
     storage.backup.upload_to_s3(&estate_snapshot).await?;
 
     println!("Manual backup completed");
@@ -236,7 +236,7 @@ async fn manual_backup(storage: &StorageService) -> Result<()> {
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotInfo {
-    /// Snapshot name (e.g., "aws_estate_2025-10-08T10-30-00.snapshot")
+    /// Snapshot name (e.g., "cloud_estate_2025-10-08T10-30-00.snapshot")
     pub name: String,
 
     /// Collection name
@@ -265,7 +265,7 @@ pub enum SnapshotLocation {
 
 **Examples:**
 - `chat_history_2025-10-08T10-30-00.snapshot`
-- `aws_estate_2025-10-09T14-45-30.snapshot`
+- `cloud_estate_2025-10-09T14-45-30.snapshot`
 
 **Timestamp Format**: ISO 8601 (`YYYY-MM-DDTHH-MM-SS`)
 
@@ -275,7 +275,7 @@ pub enum SnapshotLocation {
 s3://{bucket}/{user_id}/snapshots/{collection}/{date}.snapshot
 
 Example:
-s3://my-cloudops-backup/user-123/snapshots/aws_estate/2025-10-08T10-30-00.snapshot
+s3://my-cloudops-backup/user-123/snapshots/cloud_estate/2025-10-08T10-30-00.snapshot
 ```
 
 ## Listing Snapshots
@@ -284,7 +284,7 @@ s3://my-cloudops-backup/user-123/snapshots/aws_estate/2025-10-08T10-30-00.snapsh
 
 ```rust
 // List snapshots for a collection (local + S3)
-let snapshots = storage.backup.list_snapshots("aws_estate").await?;
+let snapshots = storage.backup.list_snapshots("cloud_estate").await?;
 
 for snapshot in snapshots {
     println!("{}: {} bytes ({})",
@@ -382,8 +382,8 @@ impl BackupManager {
 ```rust
 // Restore collection from local snapshot
 storage.backup.restore_from_snapshot(
-    "aws_estate",
-    "aws_estate_2025-10-08T10-30-00.snapshot"
+    "cloud_estate",
+    "cloud_estate_2025-10-08T10-30-00.snapshot"
 ).await?;
 ```
 
@@ -392,7 +392,7 @@ storage.backup.restore_from_snapshot(
 ```rust
 // Restore from S3 snapshot (by date)
 storage.backup.restore_from_s3(
-    "aws_estate",
+    "cloud_estate",
     "2025-10-08T10-30-00"
 ).await?;
 ```
@@ -401,7 +401,7 @@ storage.backup.restore_from_s3(
 
 ```rust
 // Restore from latest available snapshot
-let snapshots = storage.backup.list_snapshots("aws_estate").await?;
+let snapshots = storage.backup.list_snapshots("cloud_estate").await?;
 let latest = snapshots.first()
     .ok_or_else(|| anyhow!("No snapshots found"))?;
 
@@ -568,7 +568,7 @@ impl BackupManager {
             s3_config.retention_days as u64 * 24 * 60 * 60
         );
 
-        for collection in &["chat_history", "aws_estate"] {
+        for collection in &["chat_history", "cloud_estate"] {
             let snapshots = self.list_s3_snapshots(collection).await?;
 
             for snapshot in snapshots {
@@ -611,13 +611,13 @@ async fn disaster_recovery(storage: &mut StorageService) -> Result<()> {
 
     // 1. List available snapshots
     let chat_snapshots = storage.backup.list_snapshots("chat_history").await?;
-    let estate_snapshots = storage.backup.list_snapshots("aws_estate").await?;
+    let estate_snapshots = storage.backup.list_snapshots("cloud_estate").await?;
 
     // 2. Get latest snapshots
     let latest_chat = chat_snapshots.first()
         .ok_or_else(|| anyhow!("No chat_history snapshots"))?;
     let latest_estate = estate_snapshots.first()
-        .ok_or_else(|| anyhow!("No aws_estate snapshots"))?;
+        .ok_or_else(|| anyhow!("No cloud_estate snapshots"))?;
 
     println!("Latest chat snapshot: {} ({})",
         latest_chat.name,
@@ -634,8 +634,8 @@ async fn disaster_recovery(storage: &mut StorageService) -> Result<()> {
     println!("✓ Chat history restored");
 
     let estate_date = latest_estate.name.strip_suffix(".snapshot").unwrap();
-    storage.backup.restore_from_s3("aws_estate", estate_date).await?;
-    println!("✓ AWS estate restored");
+    storage.backup.restore_from_s3("cloud_estate", estate_date).await?;
+    println!("✓ cloud estate restored");
 
     // 4. Verify restoration
     let health = storage.health().await?;
@@ -663,7 +663,7 @@ storage.backup.restore_from_s3("chat_history", "latest").await?;
 
 **Recommendations:**
 - **Chat History**: Daily (low volume, high value)
-- **AWS Estate**: Every 6-12 hours (changes frequently)
+- **Cloud Estate**: Every 6-12 hours (changes frequently)
 - **Manual**: Before major operations (bulk delete, migration)
 
 ### Testing Restores
@@ -682,14 +682,14 @@ mod tests {
         let original_count = storage.estate.count().await?;
 
         // 2. Create backup
-        let snapshot = storage.backup.create_snapshot("aws_estate").await?;
+        let snapshot = storage.backup.create_snapshot("cloud_estate").await?;
 
         // 3. Modify data
         storage.estate.delete_all().await?;
         assert_eq!(storage.estate.count().await?, 0);
 
         // 4. Restore
-        storage.backup.restore_from_snapshot("aws_estate", &snapshot.name).await?;
+        storage.backup.restore_from_snapshot("cloud_estate", &snapshot.name).await?;
 
         // 5. Verify
         let restored_count = storage.estate.count().await?;
@@ -709,7 +709,7 @@ async fn check_backup_health(storage: &StorageService) -> Result<BackupHealth> {
     let mut health = BackupHealth::default();
 
     // Check for recent backups
-    for collection in &["chat_history", "aws_estate"] {
+    for collection in &["chat_history", "cloud_estate"] {
         let snapshots = storage.backup.list_snapshots(collection).await?;
 
         if let Some(latest) = snapshots.first() {

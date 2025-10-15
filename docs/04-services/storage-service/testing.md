@@ -164,14 +164,14 @@ mod config_tests {
 
         assert!(config.encryption.enabled);
         assert_eq!(config.collections.chat_history.vector_size, 1);
-        assert!(config.collections.aws_estate.vector_size > 1);
+        assert!(config.collections.cloud_estate.vector_size > 1);
     }
 
     #[test]
     fn test_config_validation() {
         let mut config = StorageConfig::default();
         config.embedding.dimension = 384;
-        config.collections.aws_estate.vector_size = 768;
+        config.collections.cloud_estate.vector_size = 768;
 
         let result = config.validate();
         assert!(result.is_err());
@@ -430,10 +430,10 @@ mod backup_integration_tests {
         add_test_data(&storage).await;
 
         // Create snapshot
-        let snapshot = storage.backup.create_snapshot("aws_estate").await.unwrap();
+        let snapshot = storage.backup.create_snapshot("cloud_estate").await.unwrap();
 
         assert!(snapshot.size_bytes > 0);
-        assert_eq!(snapshot.collection, "aws_estate");
+        assert_eq!(snapshot.collection, "cloud_estate");
     }
 
     #[tokio::test]
@@ -446,7 +446,7 @@ mod backup_integration_tests {
         let original_count = storage.estate.count().await.unwrap();
 
         // Create snapshot
-        let snapshot = storage.backup.create_snapshot("aws_estate").await.unwrap();
+        let snapshot = storage.backup.create_snapshot("cloud_estate").await.unwrap();
 
         // Delete all data
         for resource in &resources {
@@ -460,7 +460,7 @@ mod backup_integration_tests {
         assert_eq!(storage.estate.count().await.unwrap(), 0);
 
         // Restore
-        storage.backup.restore_from_snapshot("aws_estate", &snapshot.name).await.unwrap();
+        storage.backup.restore_from_snapshot("cloud_estate", &snapshot.name).await.unwrap();
 
         // Verify restored
         let restored_count = storage.estate.count().await.unwrap();
@@ -576,14 +576,14 @@ mod e2e_tests {
         let original_count = storage.estate.count().await.unwrap();
 
         // 2. Create backup
-        let snapshot = storage.backup.create_snapshot("aws_estate").await.unwrap();
+        let snapshot = storage.backup.create_snapshot("cloud_estate").await.unwrap();
 
         // 3. Simulate data loss (delete collection)
         delete_all_data(&storage).await;
         assert_eq!(storage.estate.count().await.unwrap(), 0);
 
         // 4. Restore from backup
-        storage.backup.restore_from_snapshot("aws_estate", &snapshot.name).await.unwrap();
+        storage.backup.restore_from_snapshot("cloud_estate", &snapshot.name).await.unwrap();
 
         // 5. Verify recovery
         let recovered_count = storage.estate.count().await.unwrap();

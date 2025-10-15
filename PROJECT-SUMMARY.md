@@ -1,6 +1,6 @@
 # Escher V2 - Complete Project Summary
 
-**Project**: AWS CloudOps AI Agent System (V2)
+**Project**: Escher Multi-Cloud Operations Platform (V2)
 **Repository**: v2-architecture-docs
 **Purpose**: Single source of truth for system architecture
 **Status**: Active Development | 90% Architecture Complete
@@ -96,7 +96,7 @@ USER'S ENVIRONMENT (100% Private)
 │  Physical Laptop (Tauri App)                              │
 │  ├─ React Frontend (Multi-cloud UI)                       │
 │  ├─ Rust Backend (Execution Engine)                       │
-│  ├─ Local Vector Store (5 RAG Collections)                │
+│  ├─ Local Vector Store (6 RAG Collections)                │
 │  └─ Secure Credentials Store (AWS/Azure/GCP)              │
 │                                                            │
 │  Extended Runtime (Optional - User's Cloud)               │
@@ -351,9 +351,9 @@ These are **Rust crates** (like npm packages) used by both client and server:
 **Purpose**: Manage Qdrant vector DB for RAG capabilities
 
 **Client Uses**:
-- Embedded Qdrant for local AWS estate + chat history
+- Embedded Qdrant for local cloud estate + chat history + playbooks
 - Stores FULL data with encryption (AES-256-GCM)
-- Collections: chat_history, aws_estate, executed_operations, immutable_reports, alerts_events
+- Collections: chat_history, cloud_estate, executed_operations, immutable_reports, alerts_events, user_playbooks
 
 **Server Uses**:
 - Embedded Qdrant for playbook metadata + S3 paths
@@ -428,7 +428,7 @@ These are **Rust crates** (like npm packages) used by both client and server:
 
 ## Data Architecture
 
-### Client-Side RAG (5 Collections)
+### Client-Side RAG (6 Collections)
 
 **Storage Location**:
 - Local Only: `~/.escher/qdrant/` + periodic backup to S3 (hourly)
@@ -465,6 +465,12 @@ These are **Rust crates** (like npm packages) used by both client and server:
    - Scan results (morning reports)
    - Auto-remediation settings
    - Report templates
+
+6. **User Playbooks** (Real 384D vectors)
+   - User's custom playbooks with full scripts
+   - Encrypted with AES-256-GCM
+   - Storage strategies: local_only, uploaded_for_review, uploaded_trusted, using_default
+   - Managed by Playbook Service crate
 
 ### Server-Side RAG (Global Knowledge)
 
@@ -819,7 +825,7 @@ Users can switch between models:
    - User choice based on needs
 
 3. **✅ Semantic Search with RAG**
-   - Client-side: 5 RAG collections (estate, chat, operations, reports, alerts)
+   - Client-side: 6 RAG collections (estate, chat, operations, reports, alerts, user_playbooks)
    - Server-side: Global knowledge (playbooks, best practices, CLI commands)
    - Combined power: Context + Expertise
 

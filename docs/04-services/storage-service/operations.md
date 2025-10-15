@@ -504,8 +504,8 @@ async fn create_backup(storage: &StorageService) -> anyhow::Result<()> {
         chat_snapshot.size_bytes
     );
 
-    let estate_snapshot = storage.backup.create_snapshot("aws_estate").await?;
-    println!("AWS estate: {} ({} bytes)",
+    let estate_snapshot = storage.backup.create_snapshot("cloud_estate").await?;
+    println!("cloud estate: {} ({} bytes)",
         estate_snapshot.name,
         estate_snapshot.size_bytes
     );
@@ -525,7 +525,7 @@ async fn create_backup(storage: &StorageService) -> anyhow::Result<()> {
 async fn list_backups(storage: &StorageService) -> anyhow::Result<()> {
     println!("Available backups:");
 
-    for collection in &["chat_history", "aws_estate"] {
+    for collection in &["chat_history", "cloud_estate"] {
         let snapshots = storage.backup.list_snapshots(collection).await?;
 
         println!("\n{}:", collection);

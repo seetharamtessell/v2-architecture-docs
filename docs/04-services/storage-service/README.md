@@ -5,7 +5,7 @@
 
 ## Overview
 
-The Storage Service is a Pure Rust crate that handles all local storage operations for the CloudOps client. It uses a single Qdrant instance (embedded mode) for both chat history and AWS estate data, with application-level encryption and automated S3 backup.
+The Storage Service is a Pure Rust crate that handles all local storage operations for the CloudOps client. It uses a single Qdrant instance (embedded mode) for both chat history and cloud estate data, with application-level encryption and automated S3 backup.
 
 ## Responsibilities
 
@@ -115,11 +115,11 @@ for resource in results {
 storage.backup.start_auto_backup().await?;
 
 // Manual snapshot
-let snapshot = storage.backup.create_snapshot("aws_estate").await?;
+let snapshot = storage.backup.create_snapshot("cloud_estate").await?;
 storage.backup.upload_to_s3(&snapshot).await?;
 
 // Restore from S3
-storage.backup.restore_from_s3("aws_estate", "2025-10-08").await?;
+storage.backup.restore_from_s3("cloud_estate", "2025-10-08").await?;
 ```
 
 ## Design Highlights
