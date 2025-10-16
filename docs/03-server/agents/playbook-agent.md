@@ -1,8 +1,14 @@
 # Playbook Agent
 
-**Role**: LLM + RAG intelligent playbook discovery, ranking, and orchestration engine
+**Role**: RAG-powered playbook search and LLM-based intelligent ranking engine
+
 **Type**: Server-side Rust service using storage-service crate + LLM integration (Claude/GPT)
+
 **Location**: Runs on Escher server (ECS/EC2 with EBS/EFS volume)
+
+**Input**: Structured JSON from Master Agent (intent already classified)
+
+**Flow**: JSON → RAG Search → LLM Ranking → Output
 
 ---
 
@@ -28,14 +34,13 @@
 
 ## What It Does
 
-The Playbook Agent is an **intelligent search and recommendation engine** powered by LLM + RAG. It:
+The Playbook Agent receives **structured JSON input** from the Master Agent (intent already classified) and performs:
 
-1. **Understands intent** using LLM (Claude/GPT) - not just keywords
-2. **Finds candidates** using RAG vector search across Escher + Tenant playbooks
-3. **Ranks intelligently** using LLM reasoning + precedence rules
-4. **Returns complete playbooks** with explain plan, code, and reasoning
+1. **RAG Vector Search**: Finds candidate playbooks using semantic embeddings across Escher + Tenant libraries
+2. **Intelligent Ranking**: Uses LLM (Claude/GPT) to evaluate candidates with full context and precedence rules
+3. **Complete Response**: Returns ranked playbooks with explain plans, scripts, and reasoning
 
-**Key Insight**: It's not just search - it's an AI agent that understands what you're trying to do and recommends the best automation.
+**Key Insight**: This agent does NOT do intent classification - that's the Master Agent's job. It receives clean, structured JSON and focuses on finding and ranking the best playbooks.
 
 ---
 
@@ -234,63 +239,34 @@ playbooks/backup-and-stop-rds/v1.0.0/
 ### Overview
 
 ```
-User Query
+Master Agent (Intent Classification)
+    ↓
+Structured JSON Input
     ↓
 ┌─────────────────────────────────────────────────────┐
-│ STEP 1: LLM Intent Understanding                    │
-│  LLM analyzes query to extract intent               │
+│ PLAYBOOK AGENT                                       │
 ├─────────────────────────────────────────────────────┤
-│ STEP 2: RAG Vector Search                           │
+│ STEP 1: RAG Vector Search                            │
 │  Find candidate playbooks using embeddings          │
 ├─────────────────────────────────────────────────────┤
-│ STEP 3: LLM Ranking & Reasoning                     │
+│ STEP 2: LLM Ranking & Reasoning                     │
 │  LLM evaluates each candidate with context          │
 ├─────────────────────────────────────────────────────┤
-│ STEP 4: Package & Return                            │
-│  Send playbooks with explain plan + code            │
+│ STEP 3: Package & Return                            │
+│  Send playbooks with explain plan + scripts         │
 └─────────────────────────────────────────────────────┘
     ↓
 Client receives ranked playbooks ready to execute
 ```
 
+**Key Point**: The Playbook Agent receives **structured JSON** from the Master Agent, not raw user queries. Intent classification has already been done.
+
 ---
 
-### STEP 1: LLM Intent Understanding
+### Input Format (From Master Agent)
 
-**Purpose**: Understand WHAT the user wants to do and WHY
+The Playbook Agent receives this structured JSON:
 
-**Input**: Raw user query
-```
-"Stop production RDS for weekend"
-```
-
-**LLM Prompt**:
-```
-Analyze this cloud operations request and extract structured intent:
-
-Query: "Stop production RDS for weekend"
-
-Extract:
-1. Primary action (stop, start, scale, backup, etc.)
-2. Cloud provider (aws, azure, gcp)
-3. Resource types (ec2, rds, s3, etc.)
-4. Environment/filters (production, staging, tags)
-5. Use case category (cost-optimization, maintenance, disaster-recovery)
-6. Time context (weekend, scheduled, immediate)
-
-Return JSON:
-{
-  "action": "stop",
-  "cloud_provider": "aws",
-  "resource_types": ["rds::instance"],
-  "filters": {"environment": "production"},
-  "use_case": "cost-optimization",
-  "time_based": true,
-  "keywords": ["weekend", "cost-saving", "automated-shutdown"]
-}
-```
-
-**LLM Output** (Claude/GPT):
 ```json
 {
   "action": "stop",
@@ -303,14 +279,9 @@ Return JSON:
 }
 ```
 
-**Why LLM?**:
-- Understands synonyms: "turn off" = "stop" = "shutdown"
-- Infers context: "weekend" → cost optimization use case
-- Extracts implicit requirements: production → needs snapshot before stop
-
 ---
 
-### STEP 2: RAG Vector Search
+### STEP 1: RAG Vector Search
 
 **Purpose**: Find candidate playbooks using semantic similarity
 
@@ -393,7 +364,7 @@ let candidates = merge_results(escher_results, tenant_results);
 
 ---
 
-### STEP 3: LLM Ranking & Reasoning
+### STEP 2: LLM Ranking & Reasoning
 
 **Purpose**: Evaluate each candidate with full context and explain WHY
 
@@ -484,7 +455,7 @@ Return JSON array sorted by rank.
 
 ---
 
-### STEP 4: Package & Return to Client
+### STEP 3: Package & Return to Client
 
 **Purpose**: Send complete playbooks ready for execution
 
@@ -2119,7 +2090,7 @@ Playbook Execution
     ↓
 Step 2 Fails (e.g., "Create RDS snapshot")
     ↓
-┌────────────────────────────────────────────────────┐
+┌──────────────────────────────────��─────────────────┐
 │ Execution Engine Detects Failure                   │
 ├────────────────────────────────────────────────────┤
 │ Error: "InsufficientStorageException:              │
