@@ -231,13 +231,22 @@ These are **Rust crates** (like npm packages) used by both client and server:
 
 - **Playbook Agent**: LLM + RAG intelligent playbook search and recommendation
   - **4-Step Intelligence Flow**: LLM Intent Understanding → RAG Vector Search → LLM Ranking & Reasoning → Package & Return
+  - **Normalized Storage Architecture**: Scripts and playbooks separated (database-style with foreign key references)
+  - **Three Playbook Types**: Pure Script (only script_refs), Pure Orchestration (only playbook_refs), Hybrid (mix of both)
+  - **Multi-Implementation Support**: Same script in bash/python/node/terraform/cloudformation - user chooses at runtime
+  - **orchestration.json Format**: Step sequences with external references (script_id + version, playbook_id + version)
   - **Server-Side RAG**: Embedded Qdrant with `escher_library` (global) and `tenant_{id}_playbooks` (per-tenant) collections
   - **LLM Integration**: Uses Claude/GPT for intent parsing and intelligent ranking with explanations
   - **Playbook Lifecycle**: 10 status values (draft, ready, active, deprecated, archived, pending_review, approved, rejected, broken, needs_update)
   - **Storage Strategy**: Metadata + S3 paths in RAG, full scripts in S3 (escher-library and escher-tenant-data buckets)
+  - **S3 Structure**: Two folders - scripts/ (reusable library) and playbooks/ (orchestration files)
+  - **Advanced Features**:
+    - Nested sub-steps (1.1, 1.2, 1.3) with blocking behavior
+    - Auto-remediation with LLM-powered error analysis (70-90% transient failures auto-fixed)
+    - Resume capability for mid-execution failures
   - **Review Workflow**: User uploads → pending_review → approved/rejected → active (with state transitions)
   - **What's in RAG**: Metadata (name, description, keywords, status, execution stats) + S3 script paths (NOT full scripts)
-  - **Documentation**: [docs/03-server/agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md)
+  - **Documentation**: [docs/03-server/agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md) (~3,684 lines, comprehensive)
 
 - **Classification Agent**: Intent recognition and routing
 - **Operations Agent**: Script generation from playbooks

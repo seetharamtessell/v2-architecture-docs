@@ -16,21 +16,20 @@
 
 1. [What It Does](#what-it-does)
 2. [Core Architecture Principles](#core-architecture-principles)
-3. [Three Playbook Types](#three-playbook-types)
-4. [How It Works: The Intelligence Flow](#how-it-works-the-intelligence-flow)
-5. [Playbook Lifecycle & States](#playbook-lifecycle-states)
-6. [Playbook Structure](#playbook-structure)
-7. [Nested Sub-Steps in Explain Plan](#nested-sub-steps-in-explain-plan)
-8. [Auto-Remediation Flow](#auto-remediation-flow)
-9. [Resume Capability](#resume-capability)
-10. [Storage Strategies](#storage-strategies)
-11. [S3 Storage Structure](#s3-storage-structure)
-12. [Architecture](#architecture)
-13. [Data Flow](#data-flow)
-14. [API](#api)
-15. [Related Documentation](#related-documentation)
-
----
+3. [Implementation Overview](#implementation-overview)
+4. [Playbook Structure](#playbook-structure)
+5. [Three Playbook Types](#three-playbook-types)
+6. [How It Works: The Intelligence Flow](#how-it-works-the-intelligence-flow)
+7. [Playbook Lifecycle & States](#playbook-lifecycle--states)
+8. [Storage Strategies](#storage-strategies)
+9. [S3 Storage Structure](#s3-storage-structure)
+10. [Architecture](#architecture)
+11. [Data Flow](#data-flow)
+12. [Best Practices & Quality Validation](#best-practices--quality-validation)
+13. [Related Documentation](#related-documentation)
+14. [Next Steps](#next-steps)
+15. [Appendix: Implementation Details](#appendix-implementation-details)
+16. [Appendix: Why LLM + RAG Works Better Than Just Search](#appendix-why-llm--rag-works-better-than-just-search)
 
 ## What It Does
 
@@ -99,944 +98,263 @@ Playbooks and Scripts are **separated** like a normalized database:
 
 ---
 
-## Three Playbook Types
+## Implementation Overview
 
-### Type 1: Pure Script Playbook
+This section provides a high-level mental model for implementing the Playbook Agent. Read this first to understand the complete architecture before diving into detailed implementation guidance.
 
-**Definition**: Playbook that only executes scripts (no sub-playbook calls)
+### Architecture at a Glance
 
-**Example**: "stop-rds-instance"
+The Playbook Agent is a **search-only service** that helps clients find and retrieve playbooks:
 
-```
-playbooks/stop-rds-instance/v1.0.0/
-├── metadata.json
-├── parameters.json
-└── orchestration.json
-    {
-      "steps": [
-        {
-          "step_number": 1,
-          "type": "script",
-          "script_ref": {
-            "script_id": "check-rds-state",
-            "version": "1.0.0"
-          }
-        },
-        {
-          "step_number": 2,
-          "type": "script",
-          "script_ref": {
-            "script_id": "stop-rds-instance",
-            "version": "1.0.0"
-          }
-        }
-      ]
-    }
-```
+- **Server Role**: Search engine that finds relevant playbooks using RAG + LLM ranking
+- **Client Role**: Execution engine that runs playbooks locally on user's infrastructure
+- **S3 Role**: Source of truth for all playbooks and scripts
+- **Qdrant Role**: Search index with embedded playbook content (cached from S3)
 
-**Characteristics**:
-- References only script_ids
-- Self-contained execution
-- No nested playbooks
+**Critical Principle**: Server NEVER executes scripts or accesses user's AWS infrastructure. It only searches and returns complete playbook definitions.
 
----
-
-### Type 2: Pure Orchestration Playbook
-
-**Definition**: Playbook that only calls other playbooks (no direct scripts)
-
-**Example**: "stop-rds-with-snapshot"
+### Data Flow Diagram
 
 ```
-playbooks/stop-rds-with-snapshot/v1.0.0/
-├── metadata.json
-├── parameters.json
-└── orchestration.json
-    {
-      "steps": [
-        {
-          "step_number": 1,
-          "type": "playbook",
-          "playbook_ref": {
-            "playbook_id": "create-rds-snapshot",
-            "version": "1.0.0"
-          }
-        },
-        {
-          "step_number": 2,
-          "type": "playbook",
-          "playbook_ref": {
-            "playbook_id": "stop-rds-instance",
-            "version": "2.0.0"
-          }
-        }
-      ]
-    }
+┌─────────────────────────────────────────────────────────┐
+│                    S3 STORAGE                           │
+│              (Source of Truth)                          │
+│                                                          │
+│  playbooks/                    scripts/                 │
+│    stoprds-v1.yaml              rds/                    │
+│    stoprds-v2.yaml                stop-instance.sh      │
+│    rds-backup-v1.yaml             create-snapshot.sh    │
+│    rds-backup-v2.yaml           ec2/                    │
+│                                   create-ami.sh         │
+└─────────────────────────────────────────────────────────┘
+            │
+            │ Manual Sync API Call
+            │ (POST /api/playbooks/sync)
+            ↓
+┌─────────────────────────────────────────────────────────┐
+│              SERVER QDRANT                              │
+│          (Search Index + Cache)                         │
+│                                                          │
+│  Each entry contains:                                   │
+│    - Vector embedding (384 dims)                        │
+│    - Complete playbook JSON                             │
+│    - Scripts EMBEDDED in steps                          │
+│    - Metadata for filtering                             │
+└─────────────────────────────────────────────────────────┘
+            │
+            │ Search API Call
+            │ (POST /api/playbooks/search)
+            │
+            │ Input: { intent, aws_context }
+            │ Output: Complete playbook JSON with embedded scripts
+            ↓
+┌─────────────────────────────────────────────────────────┐
+│                   CLIENT                                │
+│            (Execution Engine)                           │
+│                                                          │
+│  1. Receives complete playbook JSON                     │
+│  2. Resolves parameters from local AWS context          │
+│  3. Executes scripts locally (bash/python/node)         │
+│  4. Streams progress to user                            │
+│                                                          │
+│  ✓ Has AWS credentials                                  │
+│  ✓ Runs on user's machine                               │
+│  ✓ No S3 access needed (scripts already embedded)       │
+└─────────────────────────────────────────────────────────┘
+            ↓
+┌─────────────────────────────────────────────────────────┐
+│              USER'S AWS ESTATE                          │
+│         (RDS, EC2, S3, Lambda, etc.)                    │
+└─────────────────────────────────────────────────────────┘
 ```
 
-**Characteristics**:
-- References only playbook_ids
-- Pure coordination logic
-- Builds complex workflows from simple building blocks
+### Key Design Principles
 
-**Benefits**:
-- **Reusability**: "create-rds-snapshot" used by 10+ parent playbooks
-- **Maintainability**: Update child → all parents benefit
-- **Composition**: Complex operations from simple primitives
+#### 1. S3 as Source of Truth
+- All playbooks and scripts live in S3
+- Qdrant is just a search cache/index
+- On node restart, Qdrant recovers from its own S3 snapshots
+- Manual sync updates Qdrant from playbook S3 bucket
 
----
+#### 2. Embedded Scripts (No Client S3 Access)
+- During sync, server downloads scripts from S3 and embeds them into playbook JSON
+- Qdrant stores complete playbooks with script content inline
+- Client receives everything in one API response
+- **Why**: Avoids S3 permission issues on client side, simpler client implementation
 
-### Type 3: Hybrid Playbook
+#### 3. Versioning via Filename
+- No folder nesting per playbook
+- Version is part of filename: `stoprds-v1.yaml`, `stoprds-v2.yaml`
+- Each version is a separate searchable entity in Qdrant
+- Old versions remain searchable (no automatic deprecation)
 
-**Definition**: Playbook that mixes script calls + playbook calls
+#### 4. Manual Sync (Not Automatic)
+- Sync is triggered by explicit API call: `POST /api/playbooks/sync`
+- New playbooks won't appear in search until sync is run
+- Gives control over when changes go live
+- Incremental sync uses marker to track last synced state
 
-**Example**: "backup-and-stop-rds"
+#### 5. Incremental Sync with Marker
+- Server tracks "last sync marker" (timestamp or playbook ID)
+- Only syncs S3 files modified after last marker
+- Avoids re-processing entire library on every sync
+- Marker must persist across server restarts
 
-```
-playbooks/backup-and-stop-rds/v1.0.0/
-├── metadata.json
-├── parameters.json
-└── orchestration.json
-    {
-      "steps": [
-        {
-          "step_number": 1,
-          "type": "playbook",
-          "playbook_ref": {
-            "playbook_id": "create-rds-snapshot",
-            "version": "1.0.0"
-          }
-        },
-        {
-          "step_number": 2,
-          "type": "script",
-          "script_ref": {
-            "script_id": "verify-backup",
-            "version": "1.0.0"
-          }
-        },
-        {
-          "step_number": 3,
-          "type": "playbook",
-          "playbook_ref": {
-            "playbook_id": "stop-rds-instance",
-            "version": "2.0.0"
-          }
-        }
-      ]
-    }
-```
+#### 6. Stateless Search
+- Each search request is independent
+- No session state between requests
+- Flow: Embedding generation → Vector search → LLM re-ranking → Return results
+- Response contains complete playbook JSON ready for execution
 
-**Characteristics**:
-- Mix of script_refs + playbook_refs
-- Most flexible type
-- Allows custom logic between orchestrated steps
+### What You Need to Build
 
----
+As a **server implementer**, you must build:
 
-## How It Works: The Intelligence Flow
+1. **Sync Mechanism**
+   - API endpoint: `POST /api/playbooks/sync`
+   - Read playbooks from S3 (incremental based on marker)
+   - Download referenced scripts from S3
+   - Embed scripts into playbook JSON (replace `script_ref` with actual code)
+   - Generate embeddings from playbook content
+   - Upsert to Qdrant with full payload
+   - Update sync marker
 
-### Overview
+2. **Search API**
+   - Endpoint: `POST /api/playbooks/search`
+   - Input: User intent + AWS resource context
+   - Generate embedding from intent
+   - Qdrant vector search with metadata filters
+   - LLM re-ranking of top candidates
+   - Return complete playbook JSON (with embedded scripts)
 
-```
-Master Agent (Intent Classification)
-    ↓
-Structured JSON Input
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ PLAYBOOK AGENT                                       │
-├─────────────────────────────────────────────────────┤
-│ STEP 1: RAG Vector Search                            │
-│  Find candidate playbooks using embeddings          │
-├─────────────────────────────────────────────────────┤
-│ STEP 2: LLM Ranking & Reasoning                     │
-│  LLM evaluates each candidate with context          │
-├─────────────────────────────────────────────────────┤
-│ STEP 3: Package & Return                            │
-│  Send playbooks with explain plan + scripts         │
-└─────────────────────────────────────────────────────┘
-    ↓
-Client receives ranked playbooks ready to execute
-```
+3. **Registration API** (Optional)
+   - Endpoint: `POST /api/playbooks/register`
+   - Upload new playbook YAML to S3
+   - Upload associated scripts to S3
+   - Trigger immediate sync (don't wait for manual sync)
 
-**Key Point**: The Playbook Agent receives **structured JSON** from the Master Agent, not raw user queries. Intent classification has already been done.
+4. **Marker Storage Strategy**
+   - Choose where to store sync marker (Qdrant? S3? Database?)
+   - Must persist across server restarts
+   - Used for incremental sync
 
----
+### What You Don't Need to Build
 
-### Input Format (From Master Agent)
+As a **server implementer**, you do NOT need:
 
-The Playbook Agent receives this structured JSON:
+- ❌ AWS execution engine (client does this)
+- ❌ Parameter resolution logic (client resolves from local context)
+- ❌ S3 credential management for client (scripts are embedded in response)
+- ❌ Script validation/sandboxing (client responsibility)
+- ❌ WebSocket streaming (client handles progress streaming)
+- ❌ Playbook execution state tracking (client manages execution)
+- ❌ AWS resource scanning (client does this locally)
+
+### Response Format Example
+
+When client calls search API, server returns:
 
 ```json
 {
-  "action": "stop",
-  "cloud_provider": "aws",
-  "resource_types": ["rds::instance"],
-  "filters": {"environment": "production"},
-  "use_case": "cost-optimization",
-  "time_based": true,
-  "keywords": ["weekend", "cost-saving", "automated-shutdown", "snapshot"]
-}
-```
-
----
-
-### STEP 1: RAG Vector Search
-
-**Purpose**: Find candidate playbooks using semantic similarity
-
-**Process**:
-
-1. **Generate Embedding** from enhanced query:
-```rust
-let enhanced_query = format!(
-    "{} {} {} {}",
-    intent.action,
-    intent.resource_types.join(" "),
-    intent.use_case,
-    intent.keywords.join(" ")
-);
-// "stop rds cost-optimization weekend cost-saving automated-shutdown snapshot"
-
-let query_vector = embedder.embed(&enhanced_query).await?;
-// Returns: [0.234, -0.567, 0.123, ...] (384 dimensions)
-```
-
-2. **Search Escher Library** (global collection):
-```rust
-let escher_results = storage.search_points(
-    "escher_library",
-    query_vector,
-    Filter::must([
-        Filter::match("cloud_provider", "aws"),
-        Filter::match("resource_types", "rds::instance"),
-        Filter::match("status", "active"),
-    ]),
-    limit=10
-).await?;
-```
-
-**Results**:
-```
-[
-  {
-    playbook_id: "escher-aws-rds-stop",
-    similarity_score: 0.87,
-    metadata: { /* ... */ }
-  },
-  {
-    playbook_id: "escher-aws-rds-weekend-automation",
-    similarity_score: 0.82,
-    metadata: { /* ... */ }
-  }
-]
-```
-
-3. **Search Tenant Playbooks** (user's custom):
-```rust
-let tenant_results = storage.search_points(
-    "tenant_abc123_playbooks",
-    query_vector,
-    Filter::must([
-        Filter::match("cloud_provider", "aws"),
-        Filter::match("status", "active"),
-    ]),
-    limit=10
-).await?;
-```
-
-**Results**:
-```
-[
-  {
-    playbook_id: "user-weekend-shutdown",
-    similarity_score: 0.91,
-    metadata: { /* ... */ }
-  }
-]
-```
-
-4. **Merge & Deduplicate**:
-```rust
-let candidates = merge_results(escher_results, tenant_results);
-// Total: 3 unique playbooks
-```
-
----
-
-### STEP 2: LLM Ranking & Reasoning
-
-**Purpose**: Evaluate each candidate with full context and explain WHY
-
-**LLM Prompt** (sent to Claude/GPT):
-```
-You are an expert cloud automation advisor. Evaluate these playbooks and rank them for this user's need.
-
-USER QUERY: "Stop production RDS for weekend"
-
-EXTRACTED INTENT:
-- Action: stop
-- Cloud: aws
-- Resource: rds::instance
-- Use case: cost-optimization
-- Context: Weekend automation for production
-
-CANDIDATE PLAYBOOKS:
-
-1. user-weekend-shutdown (v1.2.0)
-   Source: USER_CUSTOM
-   Description: "Automated workflow for stopping production RDS instances over weekends..."
-   Success Rate: 100% (12/12 executions)
-   Prerequisites: ["RDS must have no active connections", "Snapshot policy configured"]
-   Keywords: ["production", "database", "weekend", "cost-saving"]
-
-2. escher-aws-rds-stop (v1.2.0)
-   Source: ESCHER_LIBRARY
-   Description: "Safely stop RDS instance with pre-flight checks..."
-   Success Rate: 98% (1547 executions)
-   Prerequisites: ["Valid RDS instance", "Stop permission"]
-   Keywords: ["rds", "stop", "safe-shutdown"]
-
-3. escher-aws-rds-weekend-automation (v1.5.0)
-   Source: ESCHER_LIBRARY
-   Description: "Complete weekend cost optimization with start/stop scheduling..."
-   Success Rate: 97% (892 executions)
-   Prerequisites: ["CloudWatch Events configured", "SNS topic for notifications"]
-   Keywords: ["weekend", "automation", "schedule", "cost-saving"]
-
-RANKING RULES:
-1. USER_CUSTOM takes precedence (user knows their environment)
-2. ESCHER_LIBRARY are battle-tested (prefer if no custom solution)
-3. Consider: success_rate, execution_count, prerequisites match, keyword overlap
-
-For each playbook, provide:
-- Rank (1, 2, 3)
-- Confidence score (0-1)
-- Reason (2-3 sentences explaining why this playbook fits)
-
-Return JSON array sorted by rank.
-```
-
-**LLM Output**:
-```json
-[
-  {
-    "rank": 1,
-    "playbook_id": "user-weekend-shutdown",
-    "version": "1.2.0",
-    "source": "tenant",
-    "confidence": 0.95,
-    "reason": "This is your team's custom playbook specifically designed for weekend RDS shutdowns in production. It has a perfect success rate (12/12) and includes environment-specific logic that Escher library playbooks don't have. Since it's built for your exact use case, it should be your first choice."
-  },
-  {
-    "rank": 2,
-    "playbook_id": "escher-aws-rds-weekend-automation",
-    "version": "1.5.0",
-    "source": "escher_library",
-    "confidence": 0.88,
-    "reason": "This is Escher's comprehensive weekend automation solution with scheduling, notifications, and automatic restart on Monday. It's battle-tested (97% success, 892 uses) and handles the complete weekend workflow. Use this if you want a more complete solution with monitoring."
-  },
-  {
-    "rank": 3,
-    "playbook_id": "escher-aws-rds-stop",
-    "version": "1.2.0",
-    "source": "escher_library",
-    "confidence": 0.72,
-    "reason": "This is a simple RDS stop playbook without weekend-specific logic or scheduling. While it's very reliable (98% success, 1547 uses), it doesn't handle the time-based automation you need. Consider this only if you want manual control."
-  }
-]
-```
-
-**Key Features**:
-- LLM considers **full context** (not just keywords)
-- Explains **trade-offs** between options
-- Respects **precedence rules** but explains when library might be better
-- Natural language **reasoning** helps user decide
-
----
-
-### STEP 3: Package & Return to Client
-
-**Purpose**: Send complete playbooks ready for execution
-
-**Response to Client**:
-```json
-{
-  "query": "Stop production RDS for weekend",
-  "results": [
+  "playbooks": [
     {
-      "rank": 1,
-      "playbook_id": "user-weekend-shutdown",
-      "version": "1.2.0",
-      "source": "tenant",
+      "playbook_id": "stoprds-v2",
+      "name": "Stop RDS Instance with Validation",
+      "description": "Safely stops an RDS instance with pre-checks",
       "confidence": 0.95,
-      "reason": "This is your team's custom playbook...",
+      "reasoning": "User requested RDS stop, this playbook includes validation",
+      "risk_level": 2,
+      "estimated_duration": 300,
 
-      "metadata": {
-        "name": "Weekend DB Shutdown",
-        "description": "Automated workflow for stopping production RDS...",
-        "cloud_provider": ["aws"],
-        "resource_types": ["rds::instance"],
-        "estimated_impact": {
-          "downtime_minutes": 10,
-          "cost_savings_monthly_usd": 120
-        }
-      },
-
-      "parameters": {
-        "instance_id": {
-          "type": "string",
+      "parameters": [
+        {
+          "name": "db_instance_id",
+          "type": "resource_id",
           "required": true,
-          "auto_fill_strategy": {
-            "source": "user_estate",
-            "estate_query": {
-              "resource_type": "rds::instance",
-              "filters": {"tags.environment": "production"}
-            }
-          }
-        },
-        "skip_snapshot": {
-          "type": "boolean",
-          "default": false
+          "description": "RDS instance identifier to stop"
         }
-      },
+      ],
 
-      "explain_plan": {
-        "what_it_does": "Creates a snapshot of the RDS instance and stops it gracefully",
-        "what_happens": [
-          {
-            "step": 1,
-            "action": "Verify RDS instance state",
-            "duration_seconds": 5
-          },
-          {
-            "step": 2,
-            "action": "Create snapshot",
-            "duration_seconds": 30
-          },
-          {
-            "step": 3,
-            "action": "Stop RDS instance",
-            "duration_seconds": 120
-          }
-        ],
-        "risks": [
-          {
-            "risk": "Active connections disrupted",
-            "severity": "medium",
-            "mitigation": "Pre-flight check verifies no active connections"
-          }
-        ]
-      },
-
-      "scripts": {
-        "shell": {
-          "code": "#!/bin/bash\nset -e\n\n# Weekend RDS Shutdown Script\n...",
-          "entry_point": "main.sh"
+      "steps": [
+        {
+          "id": "step-1",
+          "name": "Validate Instance Exists",
+          "script": "#!/bin/bash\nset -e\nDB_ID=$1\naws rds describe-db-instances --db-instance-identifier \"${DB_ID}\"\necho \"Instance ${DB_ID} exists\"",
+          "parameters": ["{{db_instance_id}}"],
+          "timeout": 30,
+          "on_failure": "stop"
         },
-        "python": {
-          "code": "import boto3\n\ndef stop_rds_instance():\n    ...",
-          "entry_point": "stop_rds.py"
+        {
+          "id": "step-2",
+          "name": "Stop RDS Instance",
+          "script": "#!/bin/bash\nset -e\nDB_ID=$1\naws rds stop-db-instance --db-instance-identifier \"${DB_ID}\"\necho \"Stopping ${DB_ID}...\"",
+          "parameters": ["{{db_instance_id}}"],
+          "depends_on": ["step-1"],
+          "timeout": 60,
+          "on_failure": "stop"
         }
-      }
-    },
-
-    // Rank 2 and 3 playbooks...
-  ]
-}
-```
-
-**What Client Gets**:
-- ✅ Ranked list (top 3-5 playbooks)
-- ✅ Full explain plan for each
-- ✅ Complete scripts (shell, python, terraform, cloudformation)
-- ✅ Parameters with auto-fill hints
-- ✅ LLM-generated reasoning
-- ✅ Confidence scores
-
-**Client's Next Steps**:
-1. User reviews explain plans
-2. Selects preferred playbook (usually rank 1)
-3. Reviews/fills parameters (auto-fill helps)
-4. Execution Engine runs the script
-
----
-
-## Why LLM + RAG Works Better Than Just Search
-
-### Traditional Keyword Search ❌
-```
-Query: "Stop production RDS for weekend"
-→ Matches: playbooks containing words "stop", "rds", "production"
-→ Problem: Misses semantic meaning (cost optimization, time-based)
-→ Problem: Can't explain why one is better than another
-```
-
-### Vector Search Only ⚠️
-```
-Query: "Stop production RDS for weekend"
-→ Embedding similarity finds related playbooks
-→ Better: Understands "shutdown" = "stop", "weekend" relates to "cost-saving"
-→ Problem: Still can't reason about which is BEST for user's context
-```
-
-### LLM + RAG ✅
-```
-Query: "Stop production RDS for weekend"
-→ LLM understands: cost optimization, weekend automation, production safety
-→ RAG finds: candidates with semantic similarity
-→ LLM evaluates: success rates, prerequisites, user's environment
-→ LLM explains: "Use your custom playbook because it has environment-specific logic..."
-→ User gets: Ranked options with clear reasoning
-```
-
----
-
-## Playbook Lifecycle & States
-
-Every playbook has a **status** field that controls its behavior in search, ranking, and execution. Understanding playbook states is critical for the agent's decision-making.
-
----
-
-### 10 Playbook Status Values
-
-| Status | Description | Visible in Search? | Rank Priority | Used By |
-|--------|-------------|-------------------|---------------|---------|
-| **draft** | Being created/edited | ❌ No | N/A | User creating playbook |
-| **ready** | Saved locally, not uploaded | ❌ No (local only) | N/A | Local playbooks |
-| **active** | Live and ready for use | ✅ Yes | **High** | Team (if shared) or user (if local) |
-| **deprecated** | Old version, newer available | ⚠️ Yes (with warning) | Low | Legacy playbooks |
-| **archived** | No longer available | ❌ No | N/A | Historical records |
-| **pending_review** | Uploaded, awaiting approval | ⚠️ Yes (with warning) | Very Low | Review workflow |
-| **approved** | Reviewed and validated | ✅ Yes | **High** | Trusted custom playbooks |
-| **rejected** | Rejected by review | ❌ No | N/A | Failed review |
-| **broken** | Known to fail | ❌ No | N/A | Disabled playbooks |
-| **needs_update** | Works but outdated | ⚠️ Yes (with warning) | Medium | Maintenance |
-
----
-
-### State Transition Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ USER CREATES PLAYBOOK                                           │
-└─────────────────────────────────────────────────────────────────┘
-    ↓
-┌─────────┐
-│  draft  │ ← User is actively editing
-└─────────┘
-    ↓ (User saves)
-┌─────────┐
-│  ready  │ ← Saved locally, not shared
-└─────────┘
-    │
-    ├───→ (User keeps private)
-    │     ┌─────────┐
-    │     │ active  │ ← local_only: Only visible to this user
-    │     └─────────┘
-    │
-    └───→ (User uploads for review)
-          ┌──────────────────┐
-          │ pending_review   │ ← uploaded_for_review: Team can see
-          └──────────────────┘
-               │
-               ├───→ (Approved)
-               │     ┌──────────┐
-               │     │ approved │ ← uploaded_trusted: High rank
-               │     └──────────┘
-               │          ↓
-               │     ┌─────────┐
-               │     │ active  │ ← Available to entire team
-               │     └─────────┘
-               │          │
-               │          ├───→ (New version released)
-               │          │     ┌──────────────┐
-               │          │     │ deprecated   │ ← Old version
-               │          │     └──────────────┘
-               │          │
-               │          ├───→ (Bug discovered)
-               │          │     ┌─────────┐
-               │          │     │ broken  │ ← Hidden from search
-               │          │     └─────────┘
-               │          │
-               │          └───→ (Outdated but working)
-               │                ┌───────────────┐
-               │                │ needs_update  │ ← Lower rank
-               │                └───────────────┘
-               │
-               └───→ (Rejected)
-                     ┌──────────┐
-                     │ rejected │ ← Hidden from search
-                     └──────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│ ESCHER LIBRARY PLAYBOOKS                                        │
-└─────────────────────────────────────────────────────────────────┘
-    ↓
-┌─────────┐
-│ active  │ ← All Escher playbooks start as active
-└─────────┘
-    │
-    ├───→ (New version)
-    │     ┌──────────────┐
-    │     │ deprecated   │ ← Old version
-    │     └──────────────┘
-    │
-    └───→ (No longer supported)
-          ┌──────────┐
-          │ archived │ ← Removed from search
-          └──────────┘
-```
-
----
-
-### Status in Action: How Agent Uses States
-
-#### 1. **Search Filtering**
-
-The agent **only searches** playbooks with specific statuses:
-
-```rust
-// In search_playbooks()
-let status_filter = Filter::should([
-    Filter::match("status", "active"),      // Primary
-    Filter::match("status", "approved"),    // After review
-    Filter::match("status", "deprecated"),  // With warning
-    Filter::match("status", "needs_update"), // With warning
-    Filter::match("status", "pending_review"), // With warning
-]);
-
-// NEVER search:
-// - draft (incomplete)
-// - ready (local only)
-// - rejected (failed review)
-// - broken (known to fail)
-// - archived (removed)
-```
-
-**Example RAG Query**:
-```rust
-storage.search_points(
-    "tenant_abc123_playbooks",
-    query_vector,
-    Filter::must([
-        Filter::match("cloud_provider", "aws"),
-        Filter::should([
-            Filter::match("status", "active"),
-            Filter::match("status", "approved"),
-        ]),
-    ]),
-    limit=10
-).await?;
-```
-
----
-
-#### 2. **Ranking by Status**
-
-Different statuses get different rank bonuses:
-
-```rust
-fn calculate_rank_bonus(status: &str) -> f32 {
-    match status {
-        "active" => 50.0,       // Full bonus
-        "approved" => 50.0,     // Full bonus (same as active)
-        "pending_review" => 5.0, // Very low (experimental)
-        "deprecated" => 10.0,   // Lower than active
-        "needs_update" => 20.0, // Medium
-        _ => 0.0,               // No bonus
-    }
-}
-```
-
-**Example Ranking**:
-
-| Playbook | Base Score | Status | Status Bonus | Final Score |
-|----------|------------|--------|--------------|-------------|
-| user-weekend-shutdown | 92 | active | +50 | **142** |
-| user-old-shutdown | 88 | deprecated | +10 | 98 |
-| ai-generated-shutdown | 85 | pending_review | +5 | 90 |
-
----
-
-#### 3. **LLM Reasoning with Status**
-
-When LLM ranks playbooks (STEP 3), status is included in the context:
-
-**LLM Prompt** (excerpt):
-```
-CANDIDATE PLAYBOOKS:
-
-1. user-weekend-shutdown (v1.2.0)
-   Status: ACTIVE ✅
-   Description: "Automated weekend RDS shutdown..."
-   Success Rate: 100% (12/12)
-   → This is trusted and battle-tested
-
-2. user-weekend-shutdown (v1.0.0)
-   Status: DEPRECATED ⚠️
-   Description: "Original version, replaced by v1.2.0"
-   Success Rate: 100% (5/5)
-   → Old version, prefer newer v1.2.0
-
-3. ai-generated-rds-stop (v1.0.0)
-   Status: PENDING_REVIEW ⚠️
-   Description: "AI-generated playbook from user query..."
-   Success Rate: N/A (untested)
-   → Untested, use with caution
-
-RANKING RULES:
-- ACTIVE/APPROVED: Highest trust
-- DEPRECATED: Prefer newer version
-- PENDING_REVIEW: Experimental, warn user
-- NEEDS_UPDATE: Works but outdated
-```
-
-**LLM Output**:
-```json
-[
-  {
-    "rank": 1,
-    "playbook_id": "user-weekend-shutdown",
-    "version": "1.2.0",
-    "status": "active",
-    "confidence": 0.95,
-    "reason": "This is the latest active version (v1.2.0) with perfect success rate. Status is ACTIVE, meaning it's trusted and battle-tested."
-  },
-  {
-    "rank": 2,
-    "playbook_id": "user-weekend-shutdown",
-    "version": "1.0.0",
-    "status": "deprecated",
-    "confidence": 0.65,
-    "reason": "This is an older version (v1.0.0) that has been DEPRECATED. While it worked well (5/5 success), you should use v1.2.0 instead."
-  },
-  {
-    "rank": 3,
-    "playbook_id": "ai-generated-rds-stop",
-    "version": "1.0.0",
-    "status": "pending_review",
-    "confidence": 0.40,
-    "reason": "This is an AI-generated playbook with status PENDING_REVIEW. It hasn't been tested yet. Use only if you want to experiment and can verify the code."
-  }
-]
-```
-
----
-
-### Review Workflow: uploaded_for_review
-
-When a user creates a custom playbook and uploads it, it enters the **review workflow**:
-
-```
-User creates playbook
-    ↓
-User clicks "Share with Team"
-    ↓
-┌────────────────────────────────────────────────────┐
-│ Playbook Service (Client)                          │
-├────────────────────────────────────────────────────┤
-│ 1. Upload scripts to S3                            │
-│ 2. Set storage_strategy: "uploaded_for_review"     │
-│ 3. Set status: "pending_review"                    │
-│ 4. Publish metadata to server                      │
-└────────────────────────────────────────────────────┘
-    ↓
-Server upserts to tenant_abc123_playbooks
-    status: "pending_review"
-    ↓
-┌────────────────────────────────────────────────────┐
-│ Team Lead Reviews Playbook                         │
-├────────────────────────────────────────────────────┤
-│ Option 1: APPROVE                                  │
-│   POST /api/playbook/.../status                    │
-│   { "status": "approved" }                         │
-│   → storage_strategy: "uploaded_trusted"           │
-│   → status: "approved" → "active"                  │
-│   → High rank in search                            │
-│                                                     │
-│ Option 2: REJECT                                   │
-│   POST /api/playbook/.../status                    │
-│   { "status": "rejected", "reason": "..." }        │
-│   → Hidden from search                             │
-│   → Creator notified                               │
-└────────────────────────────────────────────────────┘
-```
-
-**Agent Behavior During Review**:
-- ⚠️ **pending_review** playbooks ARE visible in search
-- ⚠️ Ranked VERY LOW (bonus: +5)
-- ⚠️ Returned with warning: "⚠️ UNTESTED - Pending Review"
-- ✅ Once approved → status: "approved" → higher rank
-
----
-
-### Status Update API
-
-```rust
-pub async fn update_status(
-    &self,
-    tenant_id: &str,
-    playbook_id: &str,
-    version: &str,
-    new_status: &str,
-) -> Result<()> {
-    let collection_name = format!("tenant_{}_playbooks", tenant_id);
-    let point_id = format!("{}-{}", playbook_id, version);
-
-    // Get existing point
-    let point = self.storage.get_point(&collection_name, &point_id).await?;
-    let mut payload = point.payload;
-
-    // Update status
-    payload["status"] = new_status.into();
-
-    // If approving, also update storage_strategy
-    if new_status == "approved" {
-        payload["storage_strategy"] = "uploaded_trusted".into();
-    }
-
-    // Update timestamp
-    payload["updated_at"] = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_secs()
-        .into();
-
-    // Upsert back
-    self.storage.upsert_point(
-        &collection_name,
-        &point_id,
-        point.vector,
-        payload,
-    ).await?;
-
-    Ok(())
-}
-```
-
----
-
-### State Management Examples
-
-#### Example 1: Deprecate Old Version
-
-```rust
-// User uploads new version v1.3.0
-publish_metadata(tenant_id, "user-weekend-shutdown", "1.3.0", "active");
-
-// Automatically deprecate v1.2.0
-update_status(tenant_id, "user-weekend-shutdown", "1.2.0", "deprecated");
-```
-
-**Agent Search Result**:
-```json
-{
-  "results": [
-    {
-      "playbook_id": "user-weekend-shutdown",
-      "version": "1.3.0",
-      "status": "active",
-      "confidence": 0.95,
-      "reason": "Latest version with new features"
-    },
-    {
-      "playbook_id": "user-weekend-shutdown",
-      "version": "1.2.0",
-      "status": "deprecated",
-      "confidence": 0.60,
-      "reason": "⚠️ Old version - v1.3.0 is available"
+      ]
     }
   ]
 }
 ```
 
----
+**Note**: Scripts are EMBEDDED in the response. Client doesn't need to download anything else.
 
-#### Example 2: Mark as Broken
+### Quick Start Checklist
 
-```rust
-// Execution fails 3 times in a row
-if failure_count >= 3 {
-    update_status(tenant_id, "user-broken-playbook", "1.0.0", "broken");
-}
-```
+Before implementing, ensure you have:
 
-**Agent Search Result**:
-```
-(playbook is HIDDEN from search)
-```
+- [ ] **S3 Bucket Setup**
+  - Create bucket: `s3://escher-library/`
+  - Create folders: `playbooks/` and `scripts/`
+  - Set up versioning on bucket
+  - Configure appropriate IAM permissions
 
-**User Dashboard**:
-```
-⚠️ Your playbook "user-broken-playbook" has been marked as BROKEN
-   Reason: Failed 3 consecutive executions
-   Action: Please review and fix, or delete
-```
+- [ ] **Qdrant Setup**
+  - Install Qdrant with S3 snapshot persistence
+  - Create collection: "playbooks" (384 dimensions)
+  - Configure HNSW index parameters
+  - Test recovery from S3 snapshots
 
----
+- [ ] **Embedding Model**
+  - Install `sentence-transformers` library
+  - Load model: `all-MiniLM-L6-v2` (384 dimensions)
+  - Test embedding generation
+  - Consider caching embeddings
 
-#### Example 3: Needs Update
+- [ ] **LLM Integration**
+  - Set up Claude or GPT API access
+  - Design re-ranking prompt template
+  - Test with sample playbooks
+  - Configure timeout and retry logic
 
-```rust
-// Playbook works but uses deprecated AWS CLI v1
-if uses_deprecated_api {
-    update_status(tenant_id, "user-old-cli", "1.0.0", "needs_update");
-}
-```
+- [ ] **Marker Storage Decision**
+  - Choose storage location (Qdrant special entry? S3 file? Database?)
+  - Implement marker read/write functions
+  - Test persistence across restarts
 
-**Agent Search Result**:
-```json
-{
-  "playbook_id": "user-old-cli",
-  "version": "1.0.0",
-  "status": "needs_update",
-  "confidence": 0.70,
-  "reason": "⚠️ Works but uses deprecated AWS CLI v1. Consider updating to v2."
-}
-```
+- [ ] **API Endpoints**
+  - Implement `POST /api/playbooks/sync`
+  - Implement `POST /api/playbooks/search`
+  - Implement `POST /api/playbooks/register` (optional)
+  - Add authentication/authorization
 
----
+- [ ] **Testing**
+  - Create sample playbooks in S3
+  - Test manual sync
+  - Test search with various intents
+  - Test incremental sync with marker
+  - Test server restart (Qdrant recovery)
 
-### Status in RAG Collection Schema
+### Common Pitfalls to Avoid
 
-Each playbook point in Qdrant includes:
-
-```json
-{
-  "id": "user-weekend-shutdown-v1.2.0",
-  "vector": [0.123, -0.456, ...],
-  "payload": {
-    "playbook_id": "user-weekend-shutdown",
-    "version": "1.2.0",
-    "status": "active",  // ← CRITICAL FIELD
-    "storage_strategy": "uploaded_trusted",
-    "created_at": 1726329600,
-    "updated_at": 1728391162,
-    "execution_count": 47,
-    "success_count": 47,
-    "success_rate": 1.0,
-    "last_executed_at": 1728388800
-  }
-}
-```
-
----
-
-### Status Precedence Rules
-
-When multiple versions exist, agent prefers:
-
-1. **active** > deprecated > needs_update
-2. **Higher version number** (v1.3.0 > v1.2.0)
-3. **Higher success rate** (100% > 95%)
-4. **More recent** (updated < 30 days)
-
-**Example**:
-```
-v1.3.0 (active, 95% success, 2 days old)     → Rank 1
-v1.2.0 (deprecated, 100% success, 90 days)  → Rank 2
-v1.0.0 (deprecated, 100% success, 180 days) → Rank 3
-```
+1. **Don't auto-sync on startup**: Manual sync only, gives control over when changes appear
+2. **Don't return S3 paths to client**: Embed scripts in response, avoid client S3 permissions
+3. **Don't store scripts separately in Qdrant**: Embed in step definitions for atomic retrieval
+4. **Don't forget the marker**: Without it, every sync re-processes entire S3 bucket
+5. **Don't make Qdrant payload too small**: 50-100 KB per playbook is acceptable with embedded scripts
+6. **Don't expose script registration without validation**: Always validate YAML structure and script references
 
 ---
 
@@ -1126,6 +444,7 @@ A playbook consists of:
       "name": "instance_id",
       "type": "string",
       "description": "RDS instance identifier",
+      "prompt": "Which RDS instance would you like to shut down?",
       "required": true,
       "default": null,
       "validation": {
@@ -1150,6 +469,7 @@ A playbook consists of:
       "name": "snapshot_name",
       "type": "string",
       "description": "Name for the backup snapshot (optional)",
+      "prompt": "What would you like to name the snapshot? (leave blank for auto-generated name)",
       "required": false,
       "default": "auto-snapshot-{timestamp}",
       "auto_fill_strategy": {
@@ -1161,6 +481,7 @@ A playbook consists of:
       "name": "skip_snapshot",
       "type": "boolean",
       "description": "Skip creating snapshot before shutdown",
+      "prompt": "Would you like to skip creating a snapshot? (not recommended for production)",
       "required": false,
       "default": false,
       "validation": {
@@ -1171,6 +492,7 @@ A playbook consists of:
       "name": "region",
       "type": "string",
       "description": "AWS region",
+      "prompt": "Which AWS region is the instance in?",
       "required": true,
       "auto_fill_strategy": {
         "source": "context",
@@ -1181,6 +503,7 @@ A playbook consists of:
       "name": "dry_run",
       "type": "boolean",
       "description": "Simulate without making changes",
+      "prompt": "Would you like to run this in dry-run mode first?",
       "required": false,
       "default": false
     }
@@ -1197,6 +520,639 @@ A playbook consists of:
 | `generated` | Generate using template | Create timestamp-based names |
 | `static` | Use fixed value | Default region "us-west-2" |
 | `prompt` | Ask user (no auto-fill) | Custom notes or confirmation |
+
+### 2.5 Parameter Resolution & Script Filling Process
+
+This section explains the **end-to-end flow** of how parameters get from user input into executable scripts.
+
+#### The Parameter Resolution Pipeline
+
+When a playbook is selected for execution, parameters flow through a multi-stage resolution process:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ STAGE 1: Playbook Selection                                     │
+├─────────────────────────────────────────────────────────────────┤
+│ User: "Shut down RDS instance for the weekend"                  │
+│   ↓                                                              │
+│ Playbook Agent returns: "Weekend RDS Shutdown v1.2.0"           │
+│   with parameters: [instance_id, snapshot_name, region, ...]    │
+└─────────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STAGE 2: Auto-Fill Attempts                                     │
+├─────────────────────────────────────────────────────────────────┤
+│ For each parameter, system tries auto-fill strategy:            │
+│                                                                  │
+│ instance_id (user_estate):                                      │
+│   → Query: rds::instance WHERE tags.environment='production'    │
+│   → Result: Found 3 instances → User selects "prod-db-01"       │
+│                                                                  │
+│ region (context):                                               │
+│   → Extract from selected resource context                      │
+│   → Result: "us-east-1"                                          │
+│                                                                  │
+│ snapshot_name (generated):                                      │
+│   → Apply template: "weekend-shutdown-{instance_id}-{timestamp}"│
+│   → Result: "weekend-shutdown-prod-db-01-1728391162"            │
+│                                                                  │
+│ skip_snapshot (static):                                         │
+│   → Use default value                                            │
+│   → Result: false                                                │
+│                                                                  │
+│ dry_run (static):                                               │
+│   → Use default value                                            │
+│   → Result: false                                                │
+└─────────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STAGE 3: User Prompts for Missing Parameters                    │
+├─────────────────────────────────────────────────────────────────┤
+│ If any required parameter couldn't be auto-filled:              │
+│                                                                  │
+│ UI displays the `prompt` field:                                 │
+│   ❓ "Which RDS instance would you like to shut down?"          │
+│   → User selects from dropdown or enters value                  │
+│                                                                  │
+│ UI may also prompt for optional parameters:                     │
+│   ❓ "Would you like to run this in dry-run mode first?"        │
+│   → User confirms or changes default                             │
+└─────────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STAGE 4: Parameter Validation                                   │
+├─────────────────────────────────────────────────────────────────┤
+│ Validate each parameter against rules:                          │
+│                                                                  │
+│ instance_id: "prod-db-01"                                       │
+│   ✓ Matches pattern: ^[a-zA-Z][a-zA-Z0-9-]{0,62}$              │
+│   ✓ Length: 1-63 characters                                     │
+│                                                                  │
+│ skip_snapshot: false                                            │
+│   ✓ No warning (would warn if true)                             │
+│                                                                  │
+│ All validations pass → Parameters locked for execution          │
+└─────────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STAGE 5: Parameter Context Built                                │
+├─────────────────────────────────────────────────────────────────┤
+│ Final parameter context for execution:                          │
+│                                                                  │
+│ {                                                                │
+│   "instance_id": "prod-db-01",                                   │
+│   "snapshot_name": "weekend-shutdown-prod-db-01-1728391162",     │
+│   "region": "us-east-1",                                         │
+│   "skip_snapshot": false,                                        │
+│   "dry_run": false                                               │
+│ }                                                                │
+│                                                                  │
+│ This context is available as ${playbook.*} variables            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Script Parameter Substitution During Execution
+
+Once parameters are resolved, the orchestration engine substitutes variables in each step's `parameter_mapping`:
+
+**Example from orchestration.json Step 1:**
+
+```json
+{
+  "step_number": 1,
+  "name": "Check RDS instance state",
+  "type": "script",
+  "script_ref": {
+    "script_id": "check-rds-state",
+    "version": "1.0.0"
+  },
+  "parameter_mapping": {
+    "instance_id": "${playbook.instance_id}",
+    "region": "${playbook.region}"
+  }
+}
+```
+
+**Substitution process:**
+
+```
+BEFORE substitution:
+{
+  "instance_id": "${playbook.instance_id}",
+  "region": "${playbook.region}"
+}
+
+AFTER substitution:
+{
+  "instance_id": "prod-db-01",
+  "region": "us-east-1"
+}
+```
+
+**The script receives:**
+```bash
+# check-rds-state.sh is executed with:
+INSTANCE_ID="prod-db-01"
+REGION="us-east-1"
+```
+
+#### Cross-Step Parameter Flow
+
+Parameters can flow between steps using `${stepN.output.*}` syntax:
+
+**Step 1 Output:**
+```json
+{
+  "snapshot_id": "snap-abc123",
+  "snapshot_arn": "arn:aws:rds:us-east-1:123456789:snapshot:snap-abc123",
+  "status": "completed"
+}
+```
+
+**Step 2 Parameter Mapping:**
+```json
+{
+  "step_number": 2,
+  "name": "Verify backup integrity",
+  "parameter_mapping": {
+    "snapshot_id": "${step1.output.snapshot_id}",      // → "snap-abc123"
+    "instance_id": "${playbook.instance_id}",          // → "prod-db-01"
+    "region": "${playbook.region}"                     // → "us-east-1"
+  }
+}
+```
+
+**Substitution happens sequentially:**
+1. Step 1 executes → produces output
+2. Output stored in execution context
+3. Step 2 mapping references `${step1.output.snapshot_id}`
+4. Orchestration engine substitutes with actual value
+5. Step 2 script receives resolved parameters
+
+#### Variable Substitution Types
+
+| Variable Type | Format | Example | Resolution Timing |
+|--------------|--------|---------|-------------------|
+| **Playbook parameter** | `${playbook.param}` | `${playbook.instance_id}` → `"prod-db-01"` | Before execution starts (Stage 5) |
+| **Previous step output** | `${stepN.output.field}` | `${step1.output.snapshot_id}` → `"snap-abc123"` | After step N completes |
+| **Cloud estate context** | `${estate.resource.field}` | `${estate.resource.region}` → `"us-east-1"` | From user's selected resource |
+| **Static value** | Direct value | `"us-west-2"` or `true` | No substitution needed |
+
+#### LLM's Role in Parameter Resolution
+
+**Important Clarification**: The LLM is **NOT** involved in parameter filling during execution.
+
+**What the LLM DOES** (pre-execution):
+- ✅ Search and rank playbooks based on user intent
+- ✅ Evaluate playbook candidates with full context
+- ✅ Explain why a playbook is recommended
+- ✅ Provide reasoning about parameter requirements
+
+**What the LLM DOES NOT DO** (during execution):
+- ❌ Fill parameter values at runtime
+- ❌ Perform variable substitution
+- ❌ Execute scripts or orchestration
+- ❌ Generate parameter values dynamically
+
+**Who Actually Fills Parameters:**
+1. **Auto-fill strategies**: Query user estate, extract from context, generate from templates
+2. **User input**: Via UI prompts when auto-fill fails or user override needed
+3. **Orchestration engine**: Performs variable substitution (`${playbook.*}`, `${stepN.output.*}`)
+4. **Execution engine**: Passes resolved parameters to scripts as environment variables
+
+#### Handling Unfillable Parameters
+
+**Key Concept**: When the LLM recommends a playbook during search (pre-execution), it analyzes which parameters can be auto-filled and which require user input. Parameters that cannot be auto-filled are **marked separately** and bucketed for collection before execution.
+
+**The Parameter Bucketing Process:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ STAGE 1: Playbook Agent Returns Playbook (Pre-Execution)        │
+├─────────────────────────────────────────────────────────────────┤
+│ LLM analyzes each parameter:                                    │
+│                                                                  │
+│ instance_id:                                                    │
+│   ✓ auto_fill_strategy: "user_estate"                          │
+│   ✓ CAN auto-fill from user's RDS instances                    │
+│   → Bucket: "AUTO_FILLABLE"                                     │
+│                                                                  │
+│ region:                                                         │
+│   ✓ auto_fill_strategy: "context"                              │
+│   ✓ CAN extract from selected resource context                 │
+│   → Bucket: "AUTO_FILLABLE"                                     │
+│                                                                  │
+│ snapshot_name:                                                  │
+│   ✓ auto_fill_strategy: "generated"                            │
+│   ✓ CAN generate using template                                │
+│   → Bucket: "AUTO_FILLABLE"                                     │
+│                                                                  │
+│ custom_note:                                                    │
+│   ❌ auto_fill_strategy: "prompt"                               │
+│   ❌ CANNOT auto-fill - requires user input                     │
+│   → Bucket: "REQUIRES_USER_INPUT"                               │
+│                                                                  │
+│ approval_email:                                                 │
+│   ❌ NO auto_fill_strategy defined                              │
+│   ❌ CANNOT auto-fill - missing strategy                        │
+│   → Bucket: "REQUIRES_USER_INPUT"                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Playbook Agent Response Structure:**
+
+The Playbook Agent returns playbooks with parameters pre-analyzed and bucketed:
+
+```json
+{
+  "rank": 1,
+  "playbook_id": "user-weekend-shutdown",
+  "version": "1.2.0",
+  "confidence": 0.95,
+
+  "parameters": {
+    "auto_fillable": [
+      {
+        "name": "instance_id",
+        "type": "string",
+        "description": "RDS instance identifier",
+        "prompt": "Which RDS instance would you like to shut down?",
+        "required": true,
+        "auto_fill_strategy": {
+          "source": "user_estate",
+          "estate_query": {
+            "resource_type": "rds::instance",
+            "filters": {"tags.environment": "production"}
+          }
+        },
+        "auto_fill_status": "CAN_AUTO_FILL",
+        "expected_value_count": 3
+      },
+      {
+        "name": "region",
+        "type": "string",
+        "description": "AWS region",
+        "prompt": "Which AWS region is the instance in?",
+        "required": true,
+        "auto_fill_strategy": {
+          "source": "context",
+          "context_field": "resource.region"
+        },
+        "auto_fill_status": "CAN_AUTO_FILL",
+        "expected_value": "us-east-1"
+      },
+      {
+        "name": "snapshot_name",
+        "type": "string",
+        "description": "Name for the backup snapshot",
+        "prompt": "What would you like to name the snapshot?",
+        "required": false,
+        "default": "auto-snapshot-{timestamp}",
+        "auto_fill_strategy": {
+          "source": "generated",
+          "template": "weekend-shutdown-{instance_id}-{timestamp}"
+        },
+        "auto_fill_status": "CAN_AUTO_FILL"
+      }
+    ],
+
+    "requires_user_input": [
+      {
+        "name": "custom_note",
+        "type": "string",
+        "description": "Optional note about this shutdown",
+        "prompt": "Would you like to add a note about why you're shutting down this instance?",
+        "required": false,
+        "default": "",
+        "auto_fill_strategy": {
+          "source": "prompt"
+        },
+        "auto_fill_status": "REQUIRES_USER_INPUT",
+        "reason": "No automatic source available - requires user input"
+      },
+      {
+        "name": "approval_email",
+        "type": "string",
+        "description": "Email to notify after shutdown",
+        "prompt": "Who should be notified after the instance is shut down?",
+        "required": true,
+        "auto_fill_status": "REQUIRES_USER_INPUT",
+        "reason": "No auto_fill_strategy defined"
+      }
+    ]
+  }
+}
+```
+
+**UI Workflow Based on Buckets:**
+
+```
+User selects playbook: "user-weekend-shutdown"
+    ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 1: Auto-Fill Attempts                                      │
+├─────────────────────────────────────────────────────────────────┤
+│ Frontend processes "auto_fillable" bucket:                      │
+│                                                                  │
+│ instance_id:                                                    │
+│   → Query user_estate                                           │
+│   → Found: ["prod-db-01", "prod-db-02", "dev-db-01"]           │
+│   → Present dropdown to user                                    │
+│                                                                  │
+│ region:                                                         │
+│   → Extract from context                                        │
+│   → Result: "us-east-1" (auto-filled silently)                 │
+│                                                                  │
+│ snapshot_name:                                                  │
+│   → Generate from template                                      │
+│   → Result: "weekend-shutdown-{instance_id}-{timestamp}"        │
+│   → (Will be completed after user selects instance_id)         │
+└─────────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 2: Collect User Input                                      │
+├─────────────────────────────────────────────────────────────────┤
+│ Frontend processes "requires_user_input" bucket:                │
+│                                                                  │
+│ UI displays form with ONLY unfilled parameters:                 │
+│                                                                  │
+│ ┌─────────────────────────────────────────────────────────────┐ │
+│ │ Required Parameters                                         │ │
+│ ├─────────────────────────────────────────────────────────────┤ │
+│ │ ✓ Instance ID: [prod-db-01        ▼]  (auto-filled)       │ │
+│ │ ✓ Region:      us-east-1               (auto-filled)       │ │
+│ │ ✓ Snapshot:    weekend-shutdown-prod-db-01-1728391162      │ │
+│ │                                        (auto-generated)     │ │
+│ │                                                             │ │
+│ │ ❌ Approval Email: [________________]  (REQUIRED)           │ │
+│ │    💡 "Who should be notified after shutdown?"             │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│ ┌─────────────────────────────────────────────────────────────┐ │
+│ │ Optional Parameters                                         │ │
+│ ├─────────────────────────────────────────────────────────────┤ │
+│ │ Custom Note: [________________________________]             │ │
+│ │    💡 "Add a note about why you're shutting down?"         │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│ [Cancel]                               [Execute Playbook →]     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Parameter Resolution Status Types:**
+
+| Status | Meaning | UI Behavior |
+|--------|---------|-------------|
+| `CAN_AUTO_FILL` | Has auto_fill_strategy that will succeed | Attempt auto-fill, show in dropdown/pre-filled |
+| `REQUIRES_USER_INPUT` | No auto_fill strategy OR strategy is "prompt" | Always show input field with prompt text |
+| `AUTO_FILL_FAILED` | Had auto_fill strategy but it failed | Show error + fallback to user input field |
+| `AUTO_FILLED` | Successfully auto-filled | Show as pre-filled (editable) |
+
+**Error Handling: When Auto-Fill Fails:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ SCENARIO: Auto-fill strategy fails at runtime                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│ instance_id (user_estate strategy):                             │
+│   → Query user_estate for RDS instances                         │
+│   → Result: NO instances found (empty result)                   │
+│   → Status: AUTO_FILL_FAILED                                    │
+│   → Action: Move to "requires_user_input" bucket                │
+│                                                                  │
+│ UI updates dynamically:                                         │
+│   ❌ Instance ID: [________________]  (REQUIRED)                 │
+│       ⚠️ "Could not find RDS instances in your estate"          │
+│       💡 "Enter the instance ID manually"                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Benefits of Parameter Bucketing:**
+
+1. **Clear Separation**: System knows upfront what can be automated vs what needs user input
+2. **Better UX**: Users only see fields that require their attention
+3. **Faster Execution**: Auto-fillable parameters are resolved in parallel
+4. **Explicit Feedback**: Users know WHY they need to fill a parameter (via `reason` field)
+5. **Graceful Degradation**: Auto-fill failures are handled by moving to user input bucket
+
+**LLM's Role in Bucketing (Pre-Execution):**
+
+During playbook ranking (STEP 2), the LLM analyzes the user's context to predict auto-fill success:
+
+```
+LLM Prompt:
+"Analyze these parameters for auto-fill feasibility:
+
+USER CONTEXT:
+- Has 3 RDS instances in estate (prod-db-01, prod-db-02, dev-db-01)
+- Currently viewing: prod-db-01 (region: us-east-1)
+- User role: DevOps Engineer
+
+PARAMETERS:
+1. instance_id (auto_fill: user_estate, query: rds::instance)
+2. region (auto_fill: context, field: resource.region)
+3. approval_email (auto_fill: NONE)
+
+For each parameter, return:
+- auto_fill_status: CAN_AUTO_FILL | REQUIRES_USER_INPUT
+- reason: Why it can/cannot be auto-filled
+- expected_value or expected_value_count (if applicable)
+"
+```
+
+**LLM Response:**
+```json
+{
+  "parameters_analysis": [
+    {
+      "name": "instance_id",
+      "auto_fill_status": "CAN_AUTO_FILL",
+      "reason": "User has 3 RDS instances in estate - can present dropdown",
+      "expected_value_count": 3,
+      "confidence": 0.95
+    },
+    {
+      "name": "region",
+      "auto_fill_status": "CAN_AUTO_FILL",
+      "reason": "User is viewing prod-db-01 in us-east-1 - can extract from context",
+      "expected_value": "us-east-1",
+      "confidence": 1.0
+    },
+    {
+      "name": "approval_email",
+      "auto_fill_status": "REQUIRES_USER_INPUT",
+      "reason": "No auto_fill_strategy defined - requires user to provide email",
+      "confidence": 1.0
+    }
+  ]
+}
+```
+
+**Key Takeaway**: The LLM's job during search is to **predict** which parameters will need user input, so the UI can prepare the right form fields. The actual parameter resolution happens later during execution using the deterministic auto-fill strategies.
+
+
+#### Complete Example: Weekend RDS Shutdown
+
+Let's trace how parameters flow through the entire system for the "Weekend RDS Shutdown" playbook:
+
+**1. Playbook metadata.json defines parameters:**
+```json
+{
+  "parameters": [
+    {
+      "name": "instance_id",
+      "type": "string",
+      "prompt": "Which RDS instance would you like to shut down?",
+      "required": true,
+      "auto_fill_strategy": {
+        "source": "user_estate",
+        "estate_query": {
+          "resource_type": "rds::instance",
+          "filters": {"tags.environment": "production"}
+        }
+      }
+    },
+    {
+      "name": "snapshot_name",
+      "type": "string",
+      "prompt": "What would you like to name the snapshot?",
+      "required": false,
+      "default": "auto-snapshot-{timestamp}",
+      "auto_fill_strategy": {
+        "source": "generated",
+        "template": "weekend-shutdown-{instance_id}-{timestamp}"
+      }
+    },
+    {
+      "name": "region",
+      "type": "string",
+      "prompt": "Which AWS region is the instance in?",
+      "required": true,
+      "auto_fill_strategy": {
+        "source": "context",
+        "context_field": "resource.region"
+      }
+    }
+  ]
+}
+```
+
+**2. User searches: "shut down RDS for weekend"**
+- Playbook Agent returns: "Weekend RDS Shutdown v1.2.0"
+
+**3. Auto-fill attempts:**
+```
+instance_id:
+  → Query user estate for RDS instances
+  → Found: ["prod-db-01", "prod-db-02", "dev-db-01"]
+  → UI shows dropdown, user selects "prod-db-01"
+
+snapshot_name:
+  → Apply template: "weekend-shutdown-{instance_id}-{timestamp}"
+  → Substitute: {instance_id} → "prod-db-01"
+  → Substitute: {timestamp} → "1728391162"
+  → Result: "weekend-shutdown-prod-db-01-1728391162"
+
+region:
+  → Extract from context (user selected resource in us-east-1)
+  → Result: "us-east-1"
+```
+
+**4. Parameter context built:**
+```json
+{
+  "instance_id": "prod-db-01",
+  "snapshot_name": "weekend-shutdown-prod-db-01-1728391162",
+  "region": "us-east-1",
+  "skip_snapshot": false,
+  "dry_run": false
+}
+```
+
+**5. Orchestration Step 1 executes:**
+
+orchestration.json:
+```json
+{
+  "step_number": 1,
+  "name": "Check RDS instance state",
+  "script_ref": {"script_id": "check-rds-state"},
+  "parameter_mapping": {
+    "instance_id": "${playbook.instance_id}",
+    "region": "${playbook.region}"
+  }
+}
+```
+
+Orchestration engine substitutes:
+```json
+{
+  "instance_id": "prod-db-01",
+  "region": "us-east-1"
+}
+```
+
+Script executes:
+```bash
+#!/bin/bash
+INSTANCE_ID="prod-db-01"
+REGION="us-east-1"
+
+aws rds describe-db-instances \
+  --db-instance-identifier "$INSTANCE_ID" \
+  --region "$REGION"
+```
+
+**6. Step 1 produces output:**
+```json
+{
+  "instance_state": "available",
+  "instance_arn": "arn:aws:rds:us-east-1:123456789:db:prod-db-01"
+}
+```
+
+**7. Orchestration Step 2 executes:**
+
+orchestration.json:
+```json
+{
+  "step_number": 2,
+  "name": "Create RDS snapshot",
+  "script_ref": {"script_id": "create-rds-snapshot"},
+  "parameter_mapping": {
+    "instance_id": "${playbook.instance_id}",
+    "snapshot_name": "${playbook.snapshot_name}",
+    "region": "${playbook.region}",
+    "instance_arn": "${step1.output.instance_arn}"
+  }
+}
+```
+
+Orchestration engine substitutes:
+```json
+{
+  "instance_id": "prod-db-01",
+  "snapshot_name": "weekend-shutdown-prod-db-01-1728391162",
+  "region": "us-east-1",
+  "instance_arn": "arn:aws:rds:us-east-1:123456789:db:prod-db-01"
+}
+```
+
+Script executes with resolved parameters, and so on...
+
+#### Key Takeaways
+
+1. **Parameters are resolved BEFORE execution starts** (except step outputs)
+2. **Auto-fill strategies reduce user burden** by querying resources, extracting context, or generating values
+3. **The `prompt` field is critical** for when auto-fill fails or user override is needed
+4. **Variable substitution happens at the orchestration layer**, not in the LLM
+5. **Step outputs enable chaining** by making previous results available to subsequent steps
+6. **The execution engine is deterministic** - no AI inference during parameter resolution
+7. **Pre-validation ensures prerequisites are met** before attempting operations (catches issues early)
+8. **Post-validation confirms operations actually succeeded** (not just "command accepted")
+9. **Failure handling strategies provide smart recovery** - stop for critical, retry for transient, ignore for non-critical
+10. **Step importance communicates criticality** - users understand which steps are essential vs nice-to-have
 
 ### 3. orchestration.json Structure (NEW)
 
@@ -1364,6 +1320,445 @@ A playbook consists of:
 | `parameter_mapping` | object | Maps step parameters to playbook parameters or previous step outputs |
 | `continue_on_error` | boolean | If true, continue to next step even if this fails |
 | `timeout_seconds` | integer | Step timeout (optional, default from script metadata) |
+
+#### Advanced Step Configuration: Failure Handling & Validation
+
+**NEW**: Each step can now include sophisticated failure handling strategies and validation scripts to ensure robust execution.
+
+##### Failure Handling Strategy
+
+Each step defines how to handle failures:
+
+| Field | Type | Values | Description |
+|-------|------|--------|-------------|
+| `failure_action` | enum | `stop`, `ignore`, `retry` | Action to take when step fails |
+| `importance` | enum | `critical`, `high`, `low` | User-visible importance level |
+| `retry_config` | object | {...} | Retry configuration (only if `failure_action: retry`) |
+
+**Failure Actions**:
+
+- **`stop`**: Abort entire playbook execution immediately (default for critical steps)
+  - Use for: Prerequisites, critical operations that can't be skipped
+  - Example: Checking instance exists before operating on it
+
+- **`ignore`**: Log error and continue to next step (for non-critical operations)
+  - Use for: Notifications, logging, optional cleanup
+  - Example: Sending Slack notification (nice to have, not required)
+
+- **`retry`**: Attempt step again with exponential backoff
+  - Use for: Transient failures (network timeouts, API rate limits, eventual consistency)
+  - Example: Creating snapshot (may fail temporarily due to AWS internal issues)
+  - Requires: `retry_config` object
+
+**Retry Configuration**:
+
+```json
+{
+  "retry_config": {
+    "max_attempts": 3,
+    "backoff_seconds": [30, 60, 120],
+    "retry_on_exit_codes": [1, 2, 124],  // Optional: Only retry on specific exit codes
+    "retry_on_errors": [".*timeout.*", ".*throttl.*"]  // Optional: Regex patterns in stderr
+  }
+}
+```
+
+##### Pre-Validation & Post-Validation (Optional)
+
+Each step **can optionally** have validation scripts that run **before** and/or **after** the main script. Both are completely optional - you can have:
+- ✅ No validation (just run the main script)
+- ✅ Only pre-validation
+- ✅ Only post-validation
+- ✅ Both pre-validation and post-validation
+
+**Pre-Validation** (optional - runs before main script):
+- Verifies prerequisites are met
+- Checks parameters exist and are valid
+- Validates current state allows the operation
+- Confirms permissions are available
+- Checks dependencies from previous steps
+
+**Post-Validation** (optional - runs after main script):
+- Verifies operation actually succeeded
+- Checks expected outputs exist
+- Validates output formats and values
+- Confirms state change occurred
+- Supports polling for eventual consistency
+
+**Validation Structure**:
+
+```json
+{
+  "pre_validation": {
+    "script_ref": {
+      "script_id": "pre-validate-snapshot-creation",
+      "version": "1.0.0"
+    },
+    "parameter_mapping": {
+      "instance_id": "${playbook.instance_id}",
+      "snapshot_name": "${playbook.snapshot_name}"
+    },
+    "checks": [
+      {
+        "type": "parameter_exists",
+        "parameters": ["instance_id", "snapshot_name"]
+      },
+      {
+        "type": "instance_state",
+        "expected_states": ["available", "stopped"]
+      },
+      {
+        "type": "permission_check",
+        "required_permissions": ["rds:CreateDBSnapshot"]
+      }
+    ],
+    "timeout_seconds": 30,
+    "failure_action": "stop"
+  },
+  
+  "post_validation": {
+    "script_ref": {
+      "script_id": "post-validate-snapshot-created",
+      "version": "1.0.0"
+    },
+    "parameter_mapping": {
+      "snapshot_id": "${step2.output.snapshot_id}"
+    },
+    "checks": [
+      {
+        "type": "output_variables_exist",
+        "required_variables": ["snapshot_id", "snapshot_arn", "status"]
+      },
+      {
+        "type": "snapshot_state",
+        "expected_states": ["creating", "available"],
+        "polling": {
+          "enabled": true,
+          "interval_seconds": 30,
+          "max_attempts": 10
+        }
+      }
+    ],
+    "timeout_seconds": 300,
+    "failure_action": "stop"
+  }
+}
+```
+
+**Validation Check Types**:
+
+| Check Type | Purpose | Example |
+|------------|---------|---------|
+| `parameter_exists` | Verify required parameters are present | Check instance_id exists |
+| `previous_step_output_exists` | Verify outputs from previous steps | Check step1.output.snapshot_id exists |
+| `instance_state` | Check current AWS resource state | Instance must be "available" |
+| `permission_check` | Verify IAM permissions | User has rds:CreateDBSnapshot |
+| `output_variables_exist` | Verify script produced expected outputs | snapshot_id, snapshot_arn exist |
+| `output_format` | Validate output format with regex | snapshot_id matches `^snap-[a-f0-9]{17}$` |
+| `state_value_check` | Check output value matches expected | final_state == "stopped" |
+
+##### Complete Step Example with All Features
+
+```json
+{
+  "step_number": 2,
+  "name": "Create RDS snapshot",
+  "type": "script",
+  
+  "failure_action": "retry",
+  "retry_config": {
+    "max_attempts": 3,
+    "backoff_seconds": [30, 60, 120]
+  },
+  "importance": "critical",
+  
+  "pre_validation": {
+    "script_ref": {
+      "script_id": "pre-validate-snapshot-creation",
+      "version": "1.0.0"
+    },
+    "parameter_mapping": {
+      "instance_id": "${playbook.instance_id}",
+      "snapshot_name": "${playbook.snapshot_name}",
+      "instance_state": "${step1.output.instance_state}"
+    },
+    "checks": [
+      {
+        "type": "parameter_exists",
+        "parameters": ["instance_id", "snapshot_name"],
+        "description": "Verify required parameters are present"
+      },
+      {
+        "type": "previous_step_output_exists",
+        "step": 1,
+        "required_outputs": ["instance_state", "instance_arn"],
+        "description": "Verify step 1 completed successfully"
+      },
+      {
+        "type": "instance_state",
+        "current_state": "${step1.output.instance_state}",
+        "allowed_states": ["available", "stopped"],
+        "description": "Can only snapshot from available or stopped state"
+      },
+      {
+        "type": "snapshot_name_unique",
+        "snapshot_name": "${playbook.snapshot_name}",
+        "description": "Snapshot name must not already exist"
+      },
+      {
+        "type": "permission_check",
+        "required_permissions": ["rds:CreateDBSnapshot", "rds:DescribeDBInstances"],
+        "description": "Verify user has required permissions"
+      }
+    ],
+    "timeout_seconds": 30,
+    "failure_action": "stop"
+  },
+  
+  "script_ref": {
+    "script_id": "create-rds-snapshot",
+    "version": "2.1.0",
+    "implementation": "python"
+  },
+  
+  "parameter_mapping": {
+    "instance_id": "${playbook.instance_id}",
+    "snapshot_name": "${playbook.snapshot_name}",
+    "region": "${playbook.region}"
+  },
+  
+  "post_validation": {
+    "script_ref": {
+      "script_id": "post-validate-snapshot-created",
+      "version": "1.0.0"
+    },
+    "parameter_mapping": {
+      "snapshot_id": "${step2.output.snapshot_id}",
+      "snapshot_name": "${playbook.snapshot_name}",
+      "region": "${playbook.region}"
+    },
+    "checks": [
+      {
+        "type": "output_variables_exist",
+        "required_variables": ["snapshot_id", "snapshot_arn", "status"],
+        "description": "Verify script produced all required outputs"
+      },
+      {
+        "type": "snapshot_state",
+        "snapshot_id": "${step2.output.snapshot_id}",
+        "expected_states": ["creating", "available"],
+        "description": "Verify snapshot is being created or is available",
+        "polling": {
+          "enabled": true,
+          "interval_seconds": 30,
+          "max_attempts": 10,
+          "description": "Poll AWS API until snapshot reaches expected state"
+        }
+      },
+      {
+        "type": "output_format",
+        "validations": {
+          "snapshot_id": "^snap-[a-f0-9]{17}$",
+          "snapshot_arn": "^arn:aws:rds:.*"
+        },
+        "description": "Validate output formats match AWS conventions"
+      }
+    ],
+    "timeout_seconds": 300,
+    "failure_action": "stop"
+  },
+  
+  "timeout_seconds": 300
+}
+```
+
+##### Execution Flow with Validations
+
+```
+Step 2: "Create RDS snapshot"
+  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ PRE-VALIDATION                                                  │
+├─────────────────────────────────────────────────────────────────┤
+│ Execute: pre-validate-snapshot-creation.sh                      │
+│                                                                  │
+│ Check 1: parameter_exists                                       │
+│   ✓ instance_id = "prod-db-01"                                  │
+│   ✓ snapshot_name = "weekend-shutdown-prod-db-01-1728391162"   │
+│                                                                  │
+│ Check 2: previous_step_output_exists                            │
+│   ✓ step1.output.instance_state exists                          │
+│   ✓ step1.output.instance_arn exists                            │
+│                                                                  │
+│ Check 3: instance_state                                         │
+│   ✓ Current state: "available"                                  │
+│   ✓ Allowed states: ["available", "stopped"]                    │
+│                                                                  │
+│ Check 4: snapshot_name_unique                                   │
+│   ✓ No existing snapshot with this name                         │
+│                                                                  │
+│ Check 5: permission_check                                       │
+│   ✓ User has rds:CreateDBSnapshot                               │
+│   ✓ User has rds:DescribeDBInstances                            │
+│                                                                  │
+│ Result: PRE-VALIDATION PASSED ✓                                 │
+└─────────────────────────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ MAIN SCRIPT EXECUTION                                           │
+├─────────────────────────────────────────────────────────────────┤
+│ Execute: create-rds-snapshot.py                                 │
+│                                                                  │
+│ Result: Exit code 0                                             │
+│ Output: {                                                        │
+│   "snapshot_id": "snap-0a1b2c3d4e5f67890",                      │
+│   "snapshot_arn": "arn:aws:rds:us-east-1:123:snapshot:...",     │
+│   "status": "creating"                                           │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ POST-VALIDATION                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│ Execute: post-validate-snapshot-created.sh                      │
+│                                                                  │
+│ Check 1: output_variables_exist                                 │
+│   ✓ snapshot_id exists                                          │
+│   ✓ snapshot_arn exists                                         │
+│   ✓ status exists                                               │
+│                                                                  │
+│ Check 2: snapshot_state (with polling)                          │
+│   Poll 1: state = "creating" ✓ (wait 30s)                       │
+│   Poll 2: state = "creating" ✓ (wait 30s)                       │
+│   Poll 3: state = "available" ✓ (done)                          │
+│                                                                  │
+│ Check 3: output_format                                          │
+│   ✓ snapshot_id matches regex: ^snap-[a-f0-9]{17}$              │
+│   ✓ snapshot_arn matches regex: ^arn:aws:rds:.*                 │
+│                                                                  │
+│ Result: POST-VALIDATION PASSED ✓                                │
+└─────────────────────────────────────────────────────────────────┘
+  ↓
+Step 2 Complete ✓
+Continue to Step 3
+```
+
+##### Failure Scenario Examples
+
+**Example 1: Pre-Validation Failure (Stop Execution)**
+
+```
+Step 4: "Stop RDS instance"
+  ↓
+PRE-VALIDATION
+  Check: instance_state
+    Current: "stopped"
+    Expected: ["available", "starting", "running"]
+    Result: ❌ FAILED
+  ↓
+failure_action = "stop"
+  ↓
+PLAYBOOK ABORTED
+User message: "Cannot stop instance prod-db-01: Already in 'stopped' state"
+```
+
+**Example 2: Main Script Failure (Retry)**
+
+```
+Step 2: "Create RDS snapshot"
+  ↓
+PRE-VALIDATION PASSED ✓
+  ↓
+MAIN SCRIPT EXECUTION
+  Result: Exit code 1 (Network timeout)
+  ↓
+failure_action = "retry"
+retry_config.max_attempts = 3
+  ↓
+Attempt 1 FAILED
+Wait backoff_seconds[0] = 30s
+  ↓
+RETRY ATTEMPT 2
+PRE-VALIDATION PASSED ✓
+MAIN SCRIPT EXECUTION
+  Result: Exit code 0 ✓
+  ↓
+POST-VALIDATION PASSED ✓
+  ↓
+Step 2 Complete ✓ (succeeded on retry)
+```
+
+**Example 3: Non-Critical Step Failure (Ignore)**
+
+```
+Step 3: "Send Slack notification"
+  ↓
+PRE-VALIDATION PASSED ✓
+  ↓
+MAIN SCRIPT EXECUTION
+  Result: Exit code 1 (Slack API unavailable)
+  ↓
+failure_action = "ignore"
+importance = "low"
+  ↓
+Log warning: "Step 3 failed but marked as non-critical, continuing..."
+  ↓
+Continue to Step 4
+```
+
+**Example 4: Post-Validation Timeout (Stop)**
+
+```
+Step 4: "Stop RDS instance"
+  ↓
+PRE-VALIDATION PASSED ✓
+  ↓
+MAIN SCRIPT EXECUTION SUCCESS ✓
+  Output: {final_state: "stopping"}
+  ↓
+POST-VALIDATION
+  Check: instance_state (polling enabled)
+    Poll 1-20: state = "stopping" (600 seconds elapsed)
+    Timeout reached ❌
+  ↓
+failure_action = "stop"
+  ↓
+PLAYBOOK FAILED
+User message: "Post-validation failed: Instance did not reach 'stopped' state within 600 seconds"
+```
+
+##### Benefits of Validation & Failure Handling
+
+1. **User Understands Importance**
+   - `importance: critical` → User knows this step cannot be skipped
+   - `importance: low` → User knows failure is acceptable
+   - Clear communication about what's essential vs nice-to-have
+
+2. **Robust Execution**
+   - Pre-validation catches issues before attempting operations
+   - Post-validation confirms operations actually succeeded (not just API accepted)
+   - Retry logic handles transient failures automatically
+
+3. **Better Error Messages**
+   - Pre-validation failures show exactly what prerequisite wasn't met
+   - Post-validation failures show exactly what expected outcome didn't happen
+   - Users get actionable information, not just "step failed"
+
+4. **Smart Recovery**
+   - Retry for transient failures (network, rate limits)
+   - Ignore for non-critical operations (notifications, logging)
+   - Stop for critical failures (missing resources, wrong state)
+
+5. **Guaranteed State**
+   - Polling in post-validation ensures state changes actually occurred
+   - Not just "command sent" but "state confirmed changed"
+   - Handles eventual consistency in cloud APIs
+
+6. **Type Safety**
+   - Output format validation ensures data integrity
+   - Downstream steps receive correctly formatted data
+   - Prevents cascading failures from malformed outputs
+
 
 #### script_ref Structure
 
@@ -2051,7 +2446,7 @@ DR: Restore Production RDS
 - **Debugging**: Pinpoint failures to specific sub-steps
 - **Trust**: Understand what each nested playbook does
 
-### 5. Complete Playbook Structure on Disk
+### 6. Complete Playbook Structure on Disk
 
 ```
 ~/.escher/playbooks/synced/user-weekend-shutdown/
@@ -2079,538 +2474,1002 @@ DR: Restore Production RDS
 
 ---
 
-## Auto-Remediation Flow (NEW)
+## Three Playbook Types
 
-**Key Concept**: When a step fails during playbook execution, the system can automatically attempt to fix the issue and retry the failed step.
+### Type 1: Pure Script Playbook
 
-### How Auto-Remediation Works
+**Definition**: Playbook that only executes scripts (no sub-playbook calls)
+
+**Example**: "stop-rds-instance"
 
 ```
-Playbook Execution
-    ↓
-Step 2 Fails (e.g., "Create RDS snapshot")
-    ↓
-┌──────────────────────────────────��─────────────────┐
-│ Execution Engine Detects Failure                   │
-├────────────────────────────────────────────────────┤
-│ Error: "InsufficientStorageException:              │
-│  Not enough disk space to create snapshot"         │
-└────────────────────────────────────────────────────┘
-    ↓
-┌────────────────────────────────────────────────────┐
-│ Auto-Remediation Agent (LLM-Powered)               │
-├────────────────────────────────────────────────────┤
-│ 1. Analyze error message                           │
-│ 2. Check playbook context                          │
-│ 3. Determine if auto-fixable                       │
-│ 4. Generate remediation plan                       │
-└────────────────────────────────────────────────────┘
-    ↓
-LLM Determines: "Fixable - Need to free disk space"
-    ↓
-┌────────────────────────────────────────────────────┐
-│ Remediation Steps                                   │
-├────────────────────────────────────────────────────┤
-│ 1. Delete old snapshots (retention policy)         │
-│ 2. Wait 30 seconds for space reclamation           │
-│ 3. Retry Step 2                                    │
-└────────────────────────────────────────────────────┘
-    ↓
-Step 2 Retried → Success ✓
-    ↓
-Continue to Step 3
+playbooks/stop-rds-instance/v1.0.0/
+├── metadata.json
+├── parameters.json
+└── orchestration.json
+    {
+      "steps": [
+        {
+          "step_number": 1,
+          "type": "script",
+          "script_ref": {
+            "script_id": "check-rds-state",
+            "version": "1.0.0"
+          }
+        },
+        {
+          "step_number": 2,
+          "type": "script",
+          "script_ref": {
+            "script_id": "stop-rds-instance",
+            "version": "1.0.0"
+          }
+        }
+      ]
+    }
 ```
 
-### Remediation Configuration in orchestration.json
+**Characteristics**:
+- References only script_ids
+- Self-contained execution
+- No nested playbooks
+
+---
+
+### Type 2: Pure Orchestration Playbook
+
+**Definition**: Playbook that only calls other playbooks (no direct scripts)
+
+**Example**: "stop-rds-with-snapshot"
+
+```
+playbooks/stop-rds-with-snapshot/v1.0.0/
+├── metadata.json
+├── parameters.json
+└── orchestration.json
+    {
+      "steps": [
+        {
+          "step_number": 1,
+          "type": "playbook",
+          "playbook_ref": {
+            "playbook_id": "create-rds-snapshot",
+            "version": "1.0.0"
+          }
+        },
+        {
+          "step_number": 2,
+          "type": "playbook",
+          "playbook_ref": {
+            "playbook_id": "stop-rds-instance",
+            "version": "2.0.0"
+          }
+        }
+      ]
+    }
+```
+
+**Characteristics**:
+- References only playbook_ids
+- Pure coordination logic
+- Builds complex workflows from simple building blocks
+
+**Benefits**:
+- **Reusability**: "create-rds-snapshot" used by 10+ parent playbooks
+- **Maintainability**: Update child → all parents benefit
+- **Composition**: Complex operations from simple primitives
+
+---
+
+### Type 3: Hybrid Playbook
+
+**Definition**: Playbook that mixes script calls + playbook calls
+
+**Example**: "backup-and-stop-rds"
+
+```
+playbooks/backup-and-stop-rds/v1.0.0/
+├── metadata.json
+├── parameters.json
+└── orchestration.json
+    {
+      "steps": [
+        {
+          "step_number": 1,
+          "type": "playbook",
+          "playbook_ref": {
+            "playbook_id": "create-rds-snapshot",
+            "version": "1.0.0"
+          }
+        },
+        {
+          "step_number": 2,
+          "type": "script",
+          "script_ref": {
+            "script_id": "verify-backup",
+            "version": "1.0.0"
+          }
+        },
+        {
+          "step_number": 3,
+          "type": "playbook",
+          "playbook_ref": {
+            "playbook_id": "stop-rds-instance",
+            "version": "2.0.0"
+          }
+        }
+      ]
+    }
+```
+
+**Characteristics**:
+- Mix of script_refs + playbook_refs
+- Most flexible type
+- Allows custom logic between orchestrated steps
+
+---
+
+## How It Works: The Intelligence Flow
+
+### Overview
+
+```
+Master Agent (Intent Classification)
+    ↓
+Structured JSON Input
+    ↓
+┌─────────────────────────────────────────────────────┐
+│ PLAYBOOK AGENT                                       │
+├─────────────────────────────────────────────────────┤
+│ STEP 1: RAG Vector Search                            │
+│  Find candidate playbooks using embeddings          │
+├─────────────────────────────────────────────────────┤
+│ STEP 2: LLM Ranking & Reasoning                     │
+│  LLM evaluates each candidate with context          │
+├─────────────────────────────────────────────────────┤
+│ STEP 3: Package & Return                            │
+│  Send playbooks with explain plan + scripts         │
+└─────────────────────────────────────────────────────┘
+    ↓
+Client receives ranked playbooks ready to execute
+```
+
+**Key Point**: The Playbook Agent receives **structured JSON** from the Master Agent, not raw user queries. Intent classification has already been done.
+
+---
+
+### Input Format (From Master Agent)
+
+The Playbook Agent receives this structured JSON from the Master Agent, which has already performed intent classification and parameter extraction:
 
 ```json
 {
-  "steps": [
+  "action": "stop",
+  "cloud_provider": "aws",
+  "resource_types": ["rds::instance"],
+  "filters": {"environment": "production"},
+  "use_case": "cost-optimization",
+  "time_based": true,
+  "keywords": ["weekend", "cost-saving", "automated-shutdown", "snapshot"],
+
+  "extracted_parameters": {
+    "instance_id": {
+      "value": null,
+      "source": "not_provided",
+      "candidates": ["prod-db-01", "prod-db-02"],
+      "extraction_confidence": 0.0
+    },
+    "region": {
+      "value": "us-east-1",
+      "source": "user_context",
+      "extraction_confidence": 0.95
+    },
+    "time_window": {
+      "value": "weekend",
+      "source": "user_query",
+      "extraction_confidence": 0.98
+    }
+  },
+
+  "user_context": {
+    "current_resource": {
+      "type": "rds::instance",
+      "id": "prod-db-01",
+      "region": "us-east-1",
+      "tags": {
+        "environment": "production",
+        "team": "platform"
+      }
+    },
+    "user_role": "devops_engineer",
+    "organization_id": "abc123"
+  }
+}
+```
+
+**Key Fields Explained:**
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| **`action`** | Primary operation to perform | `"stop"`, `"start"`, `"backup"`, `"scale"` |
+| **`cloud_provider`** | Target cloud platform | `"aws"`, `"gcp"`, `"azure"` |
+| **`resource_types`** | Specific resource types to operate on | `["rds::instance"]`, `["ec2::instance"]` |
+| **`filters`** | Additional filtering criteria | `{"environment": "production"}` |
+| **`use_case`** | Business reason for action | `"cost-optimization"`, `"disaster-recovery"` |
+| **`time_based`** | Whether action is time-sensitive | `true` for scheduled operations |
+| **`keywords`** | Semantic tags from user query | `["weekend", "cost-saving"]` |
+| **`extracted_parameters`** | Parameters extracted by Master Agent | Pre-filled values with confidence scores |
+| **`user_context`** | Current user's environment and resource | Active resource, role, organization |
+
+**Parameter Extraction by Master Agent:**
+
+The Master Agent extracts potential parameter values from:
+1. **User query**: "shut down prod-db-01 for the weekend"
+   - Extracts: `instance_id = "prod-db-01"`, `time_window = "weekend"`
+2. **User context**: Currently viewing resource in UI
+   - Extracts: `region = "us-east-1"`, `current_resource = prod-db-01`
+3. **User estate**: Available resources
+   - Provides: `candidates = ["prod-db-01", "prod-db-02"]`
+
+**How Playbook Agent Uses This:**
+
+1. **Search**: Uses `action`, `cloud_provider`, `resource_types`, `keywords` for RAG search
+2. **Ranking**: Considers `use_case`, `filters`, `time_based` when ranking playbooks
+3. **Parameter Pre-filling**: Passes `extracted_parameters` to returned playbooks
+4. **Context Analysis**: LLM uses `user_context` to predict which parameters can be auto-filled
+
+**Example: From User Query to Structured Input**
+
+```
+USER QUERY:
+"I need to shut down prod-db-01 this weekend to save costs"
+
+↓ Master Agent Processing ↓
+
+STRUCTURED INPUT TO PLAYBOOK AGENT:
+{
+  "action": "stop",
+  "cloud_provider": "aws",
+  "resource_types": ["rds::instance"],
+  "keywords": ["weekend", "cost-saving", "shutdown"],
+  "extracted_parameters": {
+    "instance_id": {
+      "value": "prod-db-01",
+      "source": "user_query",
+      "extraction_confidence": 0.99
+    }
+  }
+}
+```
+
+---
+
+### STEP 1: RAG Vector Search
+
+**Purpose**: Find candidate playbooks using semantic similarity
+
+**Process**:
+
+1. **Generate Embedding** from enhanced query:
+```rust
+let enhanced_query = format!(
+    "{} {} {} {}",
+    intent.action,
+    intent.resource_types.join(" "),
+    intent.use_case,
+    intent.keywords.join(" ")
+);
+// "stop rds cost-optimization weekend cost-saving automated-shutdown snapshot"
+
+let query_vector = embedder.embed(&enhanced_query).await?;
+// Returns: [0.234, -0.567, 0.123, ...] (384 dimensions)
+```
+
+2. **Search Escher Library** (global collection):
+```rust
+let escher_results = storage.search_points(
+    "escher_library",
+    query_vector,
+    Filter::must([
+        Filter::match("cloud_provider", "aws"),
+        Filter::match("resource_types", "rds::instance"),
+        Filter::match("status", "active"),
+    ]),
+    limit=10
+).await?;
+```
+
+**Results**:
+```
+[
+  {
+    playbook_id: "escher-aws-rds-stop",
+    similarity_score: 0.87,
+    metadata: { /* ... */ }
+  },
+  {
+    playbook_id: "escher-aws-rds-weekend-automation",
+    similarity_score: 0.82,
+    metadata: { /* ... */ }
+  }
+]
+```
+
+3. **Search Tenant Playbooks** (user's custom):
+```rust
+let tenant_results = storage.search_points(
+    "tenant_abc123_playbooks",
+    query_vector,
+    Filter::must([
+        Filter::match("cloud_provider", "aws"),
+        Filter::match("status", "active"),
+    ]),
+    limit=10
+).await?;
+```
+
+**Results**:
+```
+[
+  {
+    playbook_id: "user-weekend-shutdown",
+    similarity_score: 0.91,
+    metadata: { /* ... */ }
+  }
+]
+```
+
+4. **Merge & Deduplicate**:
+```rust
+let candidates = merge_results(escher_results, tenant_results);
+// Total: 3 unique playbooks
+```
+
+---
+
+### STEP 2: LLM Ranking & Reasoning
+
+**Purpose**: Evaluate each candidate with full context and explain WHY
+
+**LLM Prompt** (sent to Claude/GPT):
+```
+You are an expert cloud automation advisor. Evaluate these playbooks and rank them for this user's need.
+
+USER QUERY: "Stop production RDS for weekend"
+
+EXTRACTED INTENT:
+- Action: stop
+- Cloud: aws
+- Resource: rds::instance
+- Use case: cost-optimization
+- Context: Weekend automation for production
+
+CANDIDATE PLAYBOOKS:
+
+1. user-weekend-shutdown (v1.2.0)
+   Source: USER_CUSTOM
+   Description: "Automated workflow for stopping production RDS instances over weekends..."
+   Success Rate: 100% (12/12 executions)
+   Prerequisites: ["RDS must have no active connections", "Snapshot policy configured"]
+   Keywords: ["production", "database", "weekend", "cost-saving"]
+
+2. escher-aws-rds-stop (v1.2.0)
+   Source: ESCHER_LIBRARY
+   Description: "Safely stop RDS instance with pre-flight checks..."
+   Success Rate: 98% (1547 executions)
+   Prerequisites: ["Valid RDS instance", "Stop permission"]
+   Keywords: ["rds", "stop", "safe-shutdown"]
+
+3. escher-aws-rds-weekend-automation (v1.5.0)
+   Source: ESCHER_LIBRARY
+   Description: "Complete weekend cost optimization with start/stop scheduling..."
+   Success Rate: 97% (892 executions)
+   Prerequisites: ["CloudWatch Events configured", "SNS topic for notifications"]
+   Keywords: ["weekend", "automation", "schedule", "cost-saving"]
+
+RANKING RULES:
+1. USER_CUSTOM takes precedence (user knows their environment)
+2. ESCHER_LIBRARY are battle-tested (prefer if no custom solution)
+3. Consider: success_rate, execution_count, prerequisites match, keyword overlap
+
+For each playbook, provide:
+- Rank (1, 2, 3)
+- Confidence score (0-1)
+- Reason (2-3 sentences explaining why this playbook fits)
+
+Return JSON array sorted by rank.
+```
+
+**LLM Output**:
+```json
+[
+  {
+    "rank": 1,
+    "playbook_id": "user-weekend-shutdown",
+    "version": "1.2.0",
+    "source": "tenant",
+    "confidence": 0.95,
+    "reason": "This is your team's custom playbook specifically designed for weekend RDS shutdowns in production. It has a perfect success rate (12/12) and includes environment-specific logic that Escher library playbooks don't have. Since it's built for your exact use case, it should be your first choice."
+  },
+  {
+    "rank": 2,
+    "playbook_id": "escher-aws-rds-weekend-automation",
+    "version": "1.5.0",
+    "source": "escher_library",
+    "confidence": 0.88,
+    "reason": "This is Escher's comprehensive weekend automation solution with scheduling, notifications, and automatic restart on Monday. It's battle-tested (97% success, 892 uses) and handles the complete weekend workflow. Use this if you want a more complete solution with monitoring."
+  },
+  {
+    "rank": 3,
+    "playbook_id": "escher-aws-rds-stop",
+    "version": "1.2.0",
+    "source": "escher_library",
+    "confidence": 0.72,
+    "reason": "This is a simple RDS stop playbook without weekend-specific logic or scheduling. While it's very reliable (98% success, 1547 uses), it doesn't handle the time-based automation you need. Consider this only if you want manual control."
+  }
+]
+```
+
+**Key Features**:
+- LLM considers **full context** (not just keywords)
+- Explains **trade-offs** between options
+- Respects **precedence rules** but explains when library might be better
+- Natural language **reasoning** helps user decide
+
+---
+
+### STEP 3: Package & Return to Client
+
+**Purpose**: Send complete playbooks ready for execution
+
+**Response to Client**:
+```json
+{
+  "query": "Stop production RDS for weekend",
+  "results": [
     {
-      "step_number": 2,
-      "name": "Create RDS snapshot",
-      "type": "script",
-      "script_ref": {
-        "script_id": "create-rds-snapshot",
-        "version": "2.1.0",
-        "implementation": "python"
+      "rank": 1,
+      "playbook_id": "user-weekend-shutdown",
+      "version": "1.2.0",
+      "source": "tenant",
+      "confidence": 0.95,
+      "reason": "This is your team's custom playbook...",
+
+      "metadata": {
+        "name": "Weekend DB Shutdown",
+        "description": "Automated workflow for stopping production RDS...",
+        "cloud_provider": ["aws"],
+        "resource_types": ["rds::instance"],
+        "estimated_impact": {
+          "downtime_minutes": 10,
+          "cost_savings_monthly_usd": 120
+        }
       },
-      "auto_remediation": {
-        "enabled": true,
-        "max_attempts": 3,
-        "retry_delay_seconds": 30,
-        "remediation_strategies": [
-          {
-            "error_pattern": "InsufficientStorageException",
-            "action": "cleanup_old_snapshots",
-            "parameters": {
-              "retention_days": 7
-            }
-          },
-          {
-            "error_pattern": "SnapshotQuotaExceededException",
-            "action": "delete_oldest_snapshot",
-            "parameters": {
-              "count": 1
-            }
-          },
-          {
-            "error_pattern": "ThrottlingException",
-            "action": "exponential_backoff",
-            "parameters": {
-              "initial_delay": 5,
-              "max_delay": 60
+
+      "parameters": {
+        "instance_id": {
+          "type": "string",
+          "required": true,
+          "auto_fill_strategy": {
+            "source": "user_estate",
+            "estate_query": {
+              "resource_type": "rds::instance",
+              "filters": {"tags.environment": "production"}
             }
           }
-        ],
-        "fallback": "notify_user"
+        },
+        "skip_snapshot": {
+          "type": "boolean",
+          "default": false
+        }
       },
-      "parameter_mapping": {
-        "instance_id": "${playbook.instance_id}",
-        "snapshot_name": "${playbook.snapshot_name}"
+
+      "explain_plan": {
+        "what_it_does": "Creates a snapshot of the RDS instance and stops it gracefully",
+        "what_happens": [
+          {
+            "step": 1,
+            "action": "Verify RDS instance state",
+            "duration_seconds": 5
+          },
+          {
+            "step": 2,
+            "action": "Create snapshot",
+            "duration_seconds": 30
+          },
+          {
+            "step": 3,
+            "action": "Stop RDS instance",
+            "duration_seconds": 120
+          }
+        ],
+        "risks": [
+          {
+            "risk": "Active connections disrupted",
+            "severity": "medium",
+            "mitigation": "Pre-flight check verifies no active connections"
+          }
+        ]
+      },
+
+      "scripts": {
+        "shell": {
+          "code": "#!/bin/bash\nset -e\n\n# Weekend RDS Shutdown Script\n...",
+          "entry_point": "main.sh"
+        },
+        "python": {
+          "code": "import boto3\n\ndef stop_rds_instance():\n    ...",
+          "entry_point": "stop_rds.py"
+        }
       }
-    }
+    },
+
+    // Rank 2 and 3 playbooks...
   ]
 }
 ```
 
-### Auto-Remediation Process
+**What Client Gets**:
+- ✅ Ranked list (top 3-5 playbooks)
+- ✅ Full explain plan for each
+- ✅ Complete scripts (shell, python, terraform, cloudformation)
+- ✅ Parameters with auto-fill hints
+- ✅ LLM-generated reasoning
+- ✅ Confidence scores
 
-**1. Error Detection**:
-```rust
-match step_result {
-    Err(error) => {
-        if step.auto_remediation.enabled {
-            attempt_auto_remediation(step, error).await?;
-        } else {
-            return Err(error); // Fail immediately
-        }
-    }
-    Ok(output) => continue_to_next_step(output),
-}
-```
-
-**2. LLM Analysis** (Optional - for unknown errors):
-```
-LLM Prompt:
-"Analyze this error and suggest remediation if possible:
-
-Error: InsufficientStorageException - Not enough disk space to create snapshot
-Context: Creating RDS snapshot for instance prod-db-1
-Step: create-rds-snapshot (step 2 of 5)
-
-Can this be automatically fixed? If yes, provide:
-1. Remediation action
-2. Expected success rate
-3. Risk level (low/medium/high)
-
-Return JSON."
-```
-
-**LLM Response**:
-```json
-{
-  "auto_fixable": true,
-  "remediation_action": "cleanup_old_snapshots",
-  "parameters": {
-    "retention_days": 7,
-    "delete_count": 3
-  },
-  "success_probability": 0.85,
-  "risk_level": "low",
-  "explanation": "Delete snapshots older than 7 days to free space. Low risk since snapshots are redundant backups."
-}
-```
-
-**3. Execute Remediation**:
-```rust
-async fn execute_remediation(action: &str, params: &Value) -> Result<()> {
-    match action {
-        "cleanup_old_snapshots" => {
-            let retention_days = params["retention_days"].as_i64().unwrap();
-            delete_old_snapshots(retention_days).await?;
-            tokio::time::sleep(Duration::from_secs(30)).await; // Wait for cleanup
-            Ok(())
-        },
-        "delete_oldest_snapshot" => {
-            let count = params["count"].as_i64().unwrap();
-            delete_oldest_snapshots(count).await?;
-            Ok(())
-        },
-        "exponential_backoff" => {
-            let initial_delay = params["initial_delay"].as_i64().unwrap();
-            tokio::time::sleep(Duration::from_secs(initial_delay)).await;
-            Ok(())
-        },
-        _ => Err(Error::UnknownRemediation(action.to_string())),
-    }
-}
-```
-
-**4. Retry Failed Step**:
-```rust
-for attempt in 1..=max_attempts {
-    match execute_step(step).await {
-        Ok(output) => return Ok(output), // Success!
-        Err(error) => {
-            if attempt < max_attempts {
-                // Try remediation
-                if let Some(remediation) = find_remediation(&error, &step) {
-                    execute_remediation(&remediation.action, &remediation.params).await?;
-                    continue; // Retry
-                }
-            }
-            return Err(error); // Give up
-        }
-    }
-}
-```
-
-### Common Remediation Strategies
-
-| Error Type | Remediation Action | Success Rate |
-|------------|-------------------|--------------|
-| `InsufficientStorageException` | Delete old snapshots | 85% |
-| `SnapshotQuotaExceededException` | Delete oldest snapshot | 90% |
-| `ThrottlingException` | Exponential backoff | 95% |
-| `InvalidParameterException` | LLM suggests parameter fix | 60% |
-| `ResourceNotFoundException` | Create missing resource | 70% |
-| `AccessDeniedException` | Notify user (not auto-fixable) | 0% |
-
-### UI Display During Remediation
-
-```
-Weekend RDS Automation
-├─ Step 1: Create RDS snapshot ✓ (35s)
-├─ Step 2: Stop RDS instance ⚠️ FAILED → REMEDIATING
-│  └─ Error: InsufficientStorageException
-│  └─ Remediation: Deleting old snapshots (retention: 7 days)
-│  └─ Deleted 3 old snapshots (freed 15 GB)
-│  └─ Retrying step 2... ⏳
-│  └─ Retry successful! ✓
-└─ Step 3: Send notification ⏳ (waiting...)
-```
-
-### Remediation Logs
-
-All remediation attempts are logged for auditing:
-
-```json
-{
-  "execution_id": "exec-abc123",
-  "playbook_id": "weekend-rds-automation",
-  "version": "1.5.0",
-  "step_number": 2,
-  "remediation_log": [
-    {
-      "attempt": 1,
-      "timestamp": "2025-10-16T10:15:30Z",
-      "error": "InsufficientStorageException: Not enough disk space",
-      "remediation_action": "cleanup_old_snapshots",
-      "remediation_params": {
-        "retention_days": 7,
-        "deleted_count": 3,
-        "space_freed_gb": 15
-      },
-      "remediation_duration_seconds": 45,
-      "retry_result": "success"
-    }
-  ],
-  "final_status": "success",
-  "total_attempts": 2
-}
-```
-
-### Benefits
-
-- **Reliability**: 70-90% of transient failures auto-fixed
-- **User Experience**: No manual intervention required
-- **Transparency**: Full audit trail of remediation attempts
-- **Intelligence**: LLM can handle novel errors
-- **Safety**: Max attempts limit prevents infinite loops
+**Client's Next Steps**:
+1. User reviews explain plans
+2. Selects preferred playbook (usually rank 1)
+3. Reviews/fills parameters (auto-fill helps)
+4. Execution Engine runs the script
 
 ---
 
-## Resume Capability (NEW)
+## Playbook Lifecycle & States
 
-**Key Concept**: If a playbook execution fails mid-way, users can resume from the last successful step instead of starting over.
+Every playbook has a **status** field that controls its behavior in search, ranking, and execution. Understanding playbook states is critical for the agent's decision-making.
 
-### How Resume Works
+---
+
+### 10 Playbook Status Values
+
+| Status | Description | Visible in Search? | Rank Priority | Used By |
+|--------|-------------|-------------------|---------------|---------|
+| **draft** | Being created/edited | ❌ No | N/A | User creating playbook |
+| **ready** | Saved locally, not uploaded | ❌ No (local only) | N/A | Local playbooks |
+| **active** | Live and ready for use | ✅ Yes | **High** | Team (if shared) or user (if local) |
+| **deprecated** | Old version, newer available | ⚠️ Yes (with warning) | Low | Legacy playbooks |
+| **archived** | No longer available | ❌ No | N/A | Historical records |
+| **pending_review** | Uploaded, awaiting approval | ⚠️ Yes (with warning) | Very Low | Review workflow |
+| **approved** | Reviewed and validated | ✅ Yes | **High** | Trusted custom playbooks |
+| **rejected** | Rejected by review | ❌ No | N/A | Failed review |
+| **broken** | Known to fail | ❌ No | N/A | Disabled playbooks |
+| **needs_update** | Works but outdated | ⚠️ Yes (with warning) | Medium | Maintenance |
+
+---
+
+### State Transition Diagram
 
 ```
-Playbook Execution Started
-├─ Step 1: Create RDS snapshot ✓ (completed)
-├─ Step 2: Verify backup integrity ✓ (completed)
-├─ Step 3: Stop RDS instance ❌ (failed)
-└─ Step 4: Send notification ⏸️ (not started)
-
-┌────────────────────────────────────────────────────┐
-│ Execution State Saved                               │
-├────────────────────────────────────────────────────┤
-│ - Last successful step: 2                           │
-│ - Step outputs: {                                   │
-│     step1: {snapshot_id: "snap-123"},              │
-│     step2: {verification_status: "passed"}         │
-│   }                                                 │
-│ - Failed step: 3                                    │
-│ - Error: "ActiveConnectionsException"              │
-└────────────────────────────────────────────────────┘
-
-User Reviews Error → Fixes Issue (closes connections)
-
-User Clicks "Resume Playbook"
+┌─────────────────────────────────────────────────────────────────┐
+│ USER CREATES PLAYBOOK                                           │
+└─────────────────────────────────────────────────────────────────┘
     ↓
-┌────────────────────────────────────────────────────┐
-│ Resume from Step 3                                  │
-├────────────────────────────────────────────────────┤
-│ - Skip steps 1 & 2 (already completed)             │
-│ - Load outputs from steps 1 & 2                    │
-│ - Retry step 3 with saved parameters               │
-│ - Continue to step 4 if successful                 │
-└────────────────────────────────────────────────────┘
-    ↓
-├─ Step 3: Stop RDS instance ✓ (retried & succeeded)
-└─ Step 4: Send notification ✓ (completed)
+┌─────────┐
+│  draft  │ ← User is actively editing
+└─────────┘
+    ↓ (User saves)
+┌─────────┐
+│  ready  │ ← Saved locally, not shared
+└─────────┘
+    │
+    ├───→ (User keeps private)
+    │     ┌─────────┐
+    │     │ active  │ ← local_only: Only visible to this user
+    │     └─────────┘
+    │
+    └───→ (User uploads for review)
+          ┌──────────────────┐
+          │ pending_review   │ ← uploaded_for_review: Team can see
+          └──────────────────┘
+               │
+               ├───→ (Approved)
+               │     ┌──────────┐
+               │     │ approved │ ← uploaded_trusted: High rank
+               │     └──────────┘
+               │          ↓
+               │     ┌─────────┐
+               │     │ active  │ ← Available to entire team
+               │     └─────────┘
+               │          │
+               │          ├───→ (New version released)
+               │          │     ┌──────────────┐
+               │          │     │ deprecated   │ ← Old version
+               │          │     └──────────────┘
+               │          │
+               │          ├───→ (Bug discovered)
+               │          │     ┌─────────┐
+               │          │     │ broken  │ ← Hidden from search
+               │          │     └─────────┘
+               │          │
+               │          └───→ (Outdated but working)
+               │                ┌───────────────┐
+               │                │ needs_update  │ ← Lower rank
+               │                └───────────────┘
+               │
+               └───→ (Rejected)
+                     ┌──────────┐
+                     │ rejected │ ← Hidden from search
+                     └──────────┘
 
-Playbook Completed Successfully!
+┌─────────────────────────────────────────────────────────────────┐
+│ ESCHER LIBRARY PLAYBOOKS                                        │
+└─────────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────┐
+│ active  │ ← All Escher playbooks start as active
+└─────────┘
+    │
+    ├───→ (New version)
+    │     ┌──────────────┐
+    │     │ deprecated   │ ← Old version
+    │     └──────────────┘
+    │
+    └───→ (No longer supported)
+          ┌──────────┐
+          │ archived │ ← Removed from search
+          └──────────┘
 ```
 
-### Execution State Storage
+---
 
-**State File Format** (`~/.escher/execution-state/{execution_id}.json`):
+### Status in Action: How Agent Uses States
 
+#### 1. **Search Filtering**
+
+The agent **only searches** playbooks with specific statuses:
+
+```rust
+// In search_playbooks()
+let status_filter = Filter::should([
+    Filter::match("status", "active"),      // Primary
+    Filter::match("status", "approved"),    // After review
+    Filter::match("status", "deprecated"),  // With warning
+    Filter::match("status", "needs_update"), // With warning
+    Filter::match("status", "pending_review"), // With warning
+]);
+
+// NEVER search:
+// - draft (incomplete)
+// - ready (local only)
+// - rejected (failed review)
+// - broken (known to fail)
+// - archived (removed)
+```
+
+**Example RAG Query**:
+```rust
+storage.search_points(
+    "tenant_abc123_playbooks",
+    query_vector,
+    Filter::must([
+        Filter::match("cloud_provider", "aws"),
+        Filter::should([
+            Filter::match("status", "active"),
+            Filter::match("status", "approved"),
+        ]),
+    ]),
+    limit=10
+).await?;
+```
+
+---
+
+#### 2. **Ranking by Status**
+
+Different statuses get different rank bonuses:
+
+```rust
+fn calculate_rank_bonus(status: &str) -> f32 {
+    match status {
+        "active" => 50.0,       // Full bonus
+        "approved" => 50.0,     // Full bonus (same as active)
+        "pending_review" => 5.0, // Very low (experimental)
+        "deprecated" => 10.0,   // Lower than active
+        "needs_update" => 20.0, // Medium
+        _ => 0.0,               // No bonus
+    }
+}
+```
+
+**Example Ranking**:
+
+| Playbook | Base Score | Status | Status Bonus | Final Score |
+|----------|------------|--------|--------------|-------------|
+| user-weekend-shutdown | 92 | active | +50 | **142** |
+| user-old-shutdown | 88 | deprecated | +10 | 98 |
+| ai-generated-shutdown | 85 | pending_review | +5 | 90 |
+
+---
+
+#### 3. **LLM Reasoning with Status**
+
+When LLM ranks playbooks (STEP 3), status is included in the context:
+
+**LLM Prompt** (excerpt):
+```
+CANDIDATE PLAYBOOKS:
+
+1. user-weekend-shutdown (v1.2.0)
+   Status: ACTIVE ✅
+   Description: "Automated weekend RDS shutdown..."
+   Success Rate: 100% (12/12)
+   → This is trusted and battle-tested
+
+2. user-weekend-shutdown (v1.0.0)
+   Status: DEPRECATED ⚠️
+   Description: "Original version, replaced by v1.2.0"
+   Success Rate: 100% (5/5)
+   → Old version, prefer newer v1.2.0
+
+3. ai-generated-rds-stop (v1.0.0)
+   Status: PENDING_REVIEW ⚠️
+   Description: "AI-generated playbook from user query..."
+   Success Rate: N/A (untested)
+   → Untested, use with caution
+
+RANKING RULES:
+- ACTIVE/APPROVED: Highest trust
+- DEPRECATED: Prefer newer version
+- PENDING_REVIEW: Experimental, warn user
+- NEEDS_UPDATE: Works but outdated
+```
+
+**LLM Output**:
 ```json
-{
-  "execution_id": "exec-abc123",
-  "playbook_id": "weekend-rds-automation",
-  "version": "1.5.0",
-  "tenant_id": "abc123",
-  "user_id": "user@example.com",
-
-  "started_at": "2025-10-16T10:00:00Z",
-  "paused_at": "2025-10-16T10:05:30Z",
-  "status": "paused",
-
-  "parameters": {
-    "instance_id": "prod-db-1",
-    "snapshot_name": "weekend-backup-20251016",
-    "region": "us-east-1"
+[
+  {
+    "rank": 1,
+    "playbook_id": "user-weekend-shutdown",
+    "version": "1.2.0",
+    "status": "active",
+    "confidence": 0.95,
+    "reason": "This is the latest active version (v1.2.0) with perfect success rate. Status is ACTIVE, meaning it's trusted and battle-tested."
   },
-
-  "completed_steps": [
-    {
-      "step_number": 1,
-      "name": "Create RDS snapshot",
-      "status": "completed",
-      "started_at": "2025-10-16T10:00:00Z",
-      "completed_at": "2025-10-16T10:00:35Z",
-      "duration_seconds": 35,
-      "output": {
-        "snapshot_id": "snap-abc123",
-        "snapshot_arn": "arn:aws:rds:us-east-1:123456789:snapshot:snap-abc123"
-      }
-    },
-    {
-      "step_number": 2,
-      "name": "Verify backup integrity",
-      "status": "completed",
-      "started_at": "2025-10-16T10:00:35Z",
-      "completed_at": "2025-10-16T10:05:25Z",
-      "duration_seconds": 290,
-      "output": {
-        "verification_status": "passed",
-        "integrity_score": 1.0
-      }
-    }
-  ],
-
-  "failed_step": {
-    "step_number": 3,
-    "name": "Stop RDS instance",
-    "status": "failed",
-    "started_at": "2025-10-16T10:05:25Z",
-    "failed_at": "2025-10-16T10:05:30Z",
-    "duration_seconds": 5,
-    "error": {
-      "type": "ActiveConnectionsException",
-      "message": "Cannot stop instance with 5 active connections",
-      "code": "RDS-1003"
-    },
-    "retry_count": 0
+  {
+    "rank": 2,
+    "playbook_id": "user-weekend-shutdown",
+    "version": "1.0.0",
+    "status": "deprecated",
+    "confidence": 0.65,
+    "reason": "This is an older version (v1.0.0) that has been DEPRECATED. While it worked well (5/5 success), you should use v1.2.0 instead."
   },
-
-  "pending_steps": [4],
-
-  "resume_from_step": 3,
-  "resumable": true
-}
+  {
+    "rank": 3,
+    "playbook_id": "ai-generated-rds-stop",
+    "version": "1.0.0",
+    "status": "pending_review",
+    "confidence": 0.40,
+    "reason": "This is an AI-generated playbook with status PENDING_REVIEW. It hasn't been tested yet. Use only if you want to experiment and can verify the code."
+  }
+]
 ```
 
-### Resume API
+---
 
-**Client-Side API**:
+### Review Workflow: uploaded_for_review
+
+When a user creates a custom playbook and uploads it, it enters the **review workflow**:
+
+```
+User creates playbook
+    ↓
+User clicks "Share with Team"
+    ↓
+┌────────────────────────────────────────────────────┐
+│ Playbook Service (Client)                          │
+├────────────────────────────────────────────────────┤
+│ 1. Upload scripts to S3                            │
+│ 2. Set storage_strategy: "uploaded_for_review"     │
+│ 3. Set status: "pending_review"                    │
+│ 4. Publish metadata to server                      │
+└────────────────────────────────────────────────────┘
+    ↓
+Server upserts to tenant_abc123_playbooks
+    status: "pending_review"
+    ↓
+┌────────────────────────────────────────────────────┐
+│ Team Lead Reviews Playbook                         │
+├────────────────────────────────────────────────────┤
+│ Option 1: APPROVE                                  │
+│   POST /api/playbook/.../status                    │
+│   { "status": "approved" }                         │
+│   → storage_strategy: "uploaded_trusted"           │
+│   → status: "approved" → "active"                  │
+│   → High rank in search                            │
+│                                                     │
+│ Option 2: REJECT                                   │
+│   POST /api/playbook/.../status                    │
+│   { "status": "rejected", "reason": "..." }        │
+│   → Hidden from search                             │
+│   → Creator notified                               │
+└────────────────────────────────────────────────────┘
+```
+
+**Agent Behavior During Review**:
+- ⚠️ **pending_review** playbooks ARE visible in search
+- ⚠️ Ranked VERY LOW (bonus: +5)
+- ⚠️ Returned with warning: "⚠️ UNTESTED - Pending Review"
+- ✅ Once approved → status: "approved" → higher rank
+
+---
+
+### Status Update API
 
 ```rust
-// Check if execution can be resumed
-pub async fn can_resume(execution_id: &str) -> Result<bool> {
-    let state = load_execution_state(execution_id).await?;
-    Ok(state.status == "paused" && state.resumable)
-}
+pub async fn update_status(
+    &self,
+    tenant_id: &str,
+    playbook_id: &str,
+    version: &str,
+    new_status: &str,
+) -> Result<()> {
+    let collection_name = format!("tenant_{}_playbooks", tenant_id);
+    let point_id = format!("{}-{}", playbook_id, version);
 
-// Resume execution
-pub async fn resume_execution(execution_id: &str) -> Result<ExecutionResult> {
-    // Load saved state
-    let mut state = load_execution_state(execution_id).await?;
+    // Get existing point
+    let point = self.storage.get_point(&collection_name, &point_id).await?;
+    let mut payload = point.payload;
 
-    // Load playbook
-    let playbook = load_playbook(&state.playbook_id, &state.version).await?;
+    // Update status
+    payload["status"] = new_status.into();
 
-    // Skip completed steps, start from failed/next step
-    let start_from = state.resume_from_step;
-
-    // Execute remaining steps
-    for step_num in start_from..=playbook.steps.len() {
-        let step = &playbook.steps[step_num - 1];
-
-        // Use outputs from previous steps
-        let context = build_execution_context(&state.completed_steps);
-
-        match execute_step(step, &context).await {
-            Ok(output) => {
-                // Save progress
-                state.completed_steps.push(StepResult {
-                    step_number: step_num,
-                    status: "completed",
-                    output,
-                    ..Default::default()
-                });
-                save_execution_state(&state).await?;
-            },
-            Err(error) => {
-                // Save failure and pause
-                state.failed_step = Some(StepResult {
-                    step_number: step_num,
-                    status: "failed",
-                    error: Some(error.clone()),
-                    ..Default::default()
-                });
-                state.status = "paused";
-                save_execution_state(&state).await?;
-                return Err(error);
-            }
-        }
+    // If approving, also update storage_strategy
+    if new_status == "approved" {
+        payload["storage_strategy"] = "uploaded_trusted".into();
     }
 
-    // All steps completed
-    state.status = "completed";
-    state.completed_at = Some(SystemTime::now());
-    save_execution_state(&state).await?;
+    // Update timestamp
+    payload["updated_at"] = SystemTime::now()
+        .duration_since(UNIX_EPOCH)?
+        .as_secs()
+        .into();
 
-    Ok(ExecutionResult::Success)
-}
-```
-
-### UI for Resume
-
-**Execution History View**:
-
-```
-┌─────────────────────────────────────────────────────┐
-│ Paused Executions                                   │
-├─────────────────────────────────────────────────────┤
-│ 🔶 Weekend RDS Automation v1.5.0                    │
-│    Started: 2025-10-16 10:00 AM                     │
-│    Paused:  2025-10-16 10:05 AM (5 minutes ago)     │
-│    Status:  Failed at Step 3                        │
-│    Error:   ActiveConnectionsException              │
-│                                                      │
-│    Progress: ▓▓▓▓▓▓░░░░ 2/4 steps (50%)             │
-│                                                      │
-│    [Resume] [View Details] [Delete]                 │
-├─────────────────────────────────────────────────────┤
-│ 🔶 Backup Production Databases v2.0.0               │
-│    Started: 2025-10-15 11:30 PM                     │
-│    Paused:  2025-10-15 11:45 PM (12 hours ago)      │
-│    Status:  Failed at Step 5                        │
-│                                                      │
-│    [Resume] [View Details] [Delete]                 │
-└─────────────────────────────────────────────────────┘
-```
-
-**Resume Confirmation Dialog**:
-
-```
-┌─────────────────────────────────────────────────────┐
-│ Resume Playbook Execution?                          │
-├─────────────────────────────────────────────────────┤
-│                                                      │
-│ Playbook: Weekend RDS Automation v1.5.0             │
-│ Execution ID: exec-abc123                           │
-│                                                      │
-│ Completed Steps:                                    │
-│ ✓ Step 1: Create RDS snapshot                       │
-│ ✓ Step 2: Verify backup integrity                   │
-│                                                      │
-│ Will Resume From:                                   │
-│ ↻ Step 3: Stop RDS instance                         │
-│                                                      │
-│ Remaining Steps:                                    │
-│ ⏸️ Step 4: Send notification                         │
-│                                                      │
-│ Previous Error:                                     │
-│ ActiveConnectionsException: Cannot stop instance    │
-│ with 5 active connections                           │
-│                                                      │
-│ ⚠️ Make sure the issue has been resolved before     │
-│    resuming.                                        │
-│                                                      │
-│          [Cancel]  [Resume Execution]               │
-└─────────────────────────────────────────────────────┘
-```
-
-### Resume Limitations
-
-**Cannot Resume If**:
-- Playbook has been modified (version changed)
-- Completed steps have expired state (> 24 hours)
-- External resources changed (e.g., snapshot deleted)
-- Step dependencies broken
-
-**Validation Before Resume**:
-
-```rust
-pub fn validate_resume_state(state: &ExecutionState) -> Result<()> {
-    // Check state age
-    let state_age = SystemTime::now()
-        .duration_since(state.paused_at)?
-        .as_secs();
-    if state_age > 86400 {  // 24 hours
-        return Err(Error::StateExpired);
-    }
-
-    // Check playbook version still exists
-    let playbook = load_playbook(&state.playbook_id, &state.version).await?;
-
-    // Verify outputs from completed steps are still valid
-    for step in &state.completed_steps {
-        if let Some(snapshot_id) = step.output.get("snapshot_id") {
-            if !verify_snapshot_exists(snapshot_id).await? {
-                return Err(Error::ResourceNoLongerExists);
-            }
-        }
-    }
+    // Upsert back
+    self.storage.upsert_point(
+        &collection_name,
+        &point_id,
+        point.vector,
+        payload,
+    ).await?;
 
     Ok(())
 }
 ```
 
-### Benefits
+---
 
-- **Time Saving**: Don't repeat long-running steps
-- **Cost Saving**: Avoid redundant cloud operations
-- **Debugging**: Fix issues and continue
-- **Flexibility**: Pause and resume later
-- **Recovery**: Handle transient failures gracefully
+### State Management Examples
+
+#### Example 1: Deprecate Old Version
+
+```rust
+// User uploads new version v1.3.0
+publish_metadata(tenant_id, "user-weekend-shutdown", "1.3.0", "active");
+
+// Automatically deprecate v1.2.0
+update_status(tenant_id, "user-weekend-shutdown", "1.2.0", "deprecated");
+```
+
+**Agent Search Result**:
+```json
+{
+  "results": [
+    {
+      "playbook_id": "user-weekend-shutdown",
+      "version": "1.3.0",
+      "status": "active",
+      "confidence": 0.95,
+      "reason": "Latest version with new features"
+    },
+    {
+      "playbook_id": "user-weekend-shutdown",
+      "version": "1.2.0",
+      "status": "deprecated",
+      "confidence": 0.60,
+      "reason": "⚠️ Old version - v1.3.0 is available"
+    }
+  ]
+}
+```
+
+---
+
+#### Example 2: Mark as Broken
+
+```rust
+// Execution fails 3 times in a row
+if failure_count >= 3 {
+    update_status(tenant_id, "user-broken-playbook", "1.0.0", "broken");
+}
+```
+
+**Agent Search Result**:
+```
+(playbook is HIDDEN from search)
+```
+
+**User Dashboard**:
+```
+⚠️ Your playbook "user-broken-playbook" has been marked as BROKEN
+   Reason: Failed 3 consecutive executions
+   Action: Please review and fix, or delete
+```
+
+---
+
+#### Example 3: Needs Update
+
+```rust
+// Playbook works but uses deprecated AWS CLI v1
+if uses_deprecated_api {
+    update_status(tenant_id, "user-old-cli", "1.0.0", "needs_update");
+}
+```
+
+**Agent Search Result**:
+```json
+{
+  "playbook_id": "user-old-cli",
+  "version": "1.0.0",
+  "status": "needs_update",
+  "confidence": 0.70,
+  "reason": "⚠️ Works but uses deprecated AWS CLI v1. Consider updating to v2."
+}
+```
+
+---
+
+### Status in RAG Collection Schema
+
+Each playbook point in Qdrant includes:
+
+```json
+{
+  "id": "user-weekend-shutdown-v1.2.0",
+  "vector": [0.123, -0.456, ...],
+  "payload": {
+    "playbook_id": "user-weekend-shutdown",
+    "version": "1.2.0",
+    "status": "active",  // ← CRITICAL FIELD
+    "storage_strategy": "uploaded_trusted",
+    "created_at": 1726329600,
+    "updated_at": 1728391162,
+    "execution_count": 47,
+    "success_count": 47,
+    "success_rate": 1.0,
+    "last_executed_at": 1728388800
+  }
+}
+```
+
+---
+
+### Status Precedence Rules
+
+When multiple versions exist, agent prefers:
+
+1. **active** > deprecated > needs_update
+2. **Higher version number** (v1.3.0 > v1.2.0)
+3. **Higher success rate** (100% > 95%)
+4. **More recent** (updated < 30 days)
+
+**Example**:
+```
+v1.3.0 (active, 95% success, 2 days old)     → Rank 1
+v1.2.0 (deprecated, 100% success, 90 days)  → Rank 2
+v1.0.0 (deprecated, 100% success, 180 days) → Rank 3
+```
 
 ---
 
@@ -3519,128 +4378,6 @@ Playbook now searchable by all team members
 
 ---
 
-## Implementation
-
-### Rust Service Structure
-
-```rust
-use storage_service::{StorageService, StorageConfig, QdrantMode};
-use std::sync::Arc;
-
-pub struct PlaybookAgent {
-    storage: Arc<StorageService>,
-    config: PlaybookAgentConfig,
-}
-
-pub struct PlaybookAgentConfig {
-    pub qdrant_url: String,
-    pub embedding_service_url: String,
-}
-
-impl PlaybookAgent {
-    pub async fn new(config: PlaybookAgentConfig) -> Result<Self> {
-        // Initialize storage service in remote mode
-        let storage_config = StorageConfig {
-            qdrant: QdrantConfig {
-                mode: QdrantMode::Remote,
-                storage_path: None,
-                url: Some(config.qdrant_url.clone()),
-            },
-            embedding: EmbeddingConfig {
-                provider: EmbeddingProvider::Server {
-                    endpoint: config.embedding_service_url.clone(),
-                    api_key: None,
-                },
-                model: "text-embedding-3-small".to_string(),
-                dimension: 384,
-            },
-            encryption: EncryptionConfig {
-                enabled: false,  // Server: metadata only, no encryption
-            },
-            ..Default::default()
-        };
-
-        let storage = Arc::new(StorageService::new(storage_config).await?);
-
-        Ok(Self { storage, config })
-    }
-}
-```
-
-### Key Methods (to be implemented)
-
-```rust
-impl PlaybookAgent {
-    // Search across escher_library + tenant playbooks
-    pub async fn search_playbooks(
-        &self,
-        query: &str,
-        tenant_id: &str,
-        filters: Option<PlaybookFilters>,
-        limit: usize,
-    ) -> Result<Vec<RankedPlaybook>>;
-
-    // Publish user playbook metadata to tenant collection
-    pub async fn publish_metadata(
-        &self,
-        tenant_id: &str,
-        metadata: &PlaybookMetadata,
-        scripts: &HashMap<String, String>,  // format -> S3 path
-    ) -> Result<String>;
-
-    // Update playbook status (pending_review → approved)
-    pub async fn update_status(
-        &self,
-        tenant_id: &str,
-        playbook_id: &str,
-        version: &str,
-        new_status: &str,
-    ) -> Result<()>;
-
-    // Delete playbook metadata
-    pub async fn delete_metadata(
-        &self,
-        tenant_id: &str,
-        playbook_id: &str,
-        version: &str,
-    ) -> Result<()>;
-
-    // Update execution statistics
-    pub async fn update_execution_stats(
-        &self,
-        tenant_id: &str,
-        playbook_id: &str,
-        version: &str,
-        success: bool,
-    ) -> Result<()>;
-}
-```
-
----
-
-## API
-
-### HTTP Endpoints (Axum)
-
-```rust
-use axum::{Router, routing::{get, post, delete}, Json};
-
-pub fn router() -> Router {
-    Router::new()
-        .route("/api/playbook/search", post(search_playbooks))
-        .route("/api/playbook/metadata/publish", post(publish_metadata))
-        .route("/api/playbook/metadata/:tenant_id/:playbook_id/:version/status",
-               post(update_status))
-        .route("/api/playbook/metadata/:tenant_id/:playbook_id/:version",
-               delete(delete_metadata))
-        .route("/api/playbook/stats/:tenant_id/:playbook_id/:version",
-               post(update_stats))
-}
-```
-
----
-
-## Next Steps
 
 1. ✅ Define complete playbook structure (metadata, parameters, explain_plan)
 2. ✅ Define storage strategies (local_only, uploaded_for_review, uploaded_trusted, using_default)
@@ -3839,6 +4576,466 @@ Key validations include:
 - **Documentation**: Explain plan completeness, risk documentation, rollback strategy
 - **Security**: No hardcoded credentials, input sanitization, permissions documented
 
+### Complete Best Practices Example
+
+Here's a complete example of a high-quality playbook step that follows all best practices including validation and failure handling:
+
+```json
+{
+  "playbook_id": "escher-aws-rds-backup-and-upgrade",
+  "name": "RDS Database Backup and Upgrade",
+  "version": "2.0.0",
+  "description": "Creates a verified backup of an RDS instance before performing an in-place upgrade",
+
+  "parameters": [
+    {
+      "name": "instance_id",
+      "type": "string",
+      "description": "RDS instance identifier to backup and upgrade",
+      "required": true,
+      "validation": {
+        "pattern": "^[a-zA-Z][a-zA-Z0-9-]{0,62}$",
+        "error_message": "Must be valid RDS instance ID"
+      }
+    },
+    {
+      "name": "target_engine_version",
+      "type": "string",
+      "description": "Target database engine version",
+      "required": true,
+      "validation": {
+        "pattern": "^\\d+\\.\\d+(\\.\\d+)?$"
+      }
+    },
+    {
+      "name": "backup_retention_days",
+      "type": "integer",
+      "description": "Number of days to retain the backup",
+      "required": false,
+      "default": 7,
+      "validation": {
+        "min": 1,
+        "max": 35
+      }
+    }
+  ],
+
+  "orchestration": {
+    "steps": [
+      {
+        "step_number": 1,
+        "name": "Verify RDS instance exists and is ready",
+        "type": "script",
+        "importance": "critical",
+        "failure_action": "stop",
+
+        "script_ref": {
+          "script_id": "aws-rds-verify-instance",
+          "version": "1.0.0"
+        },
+
+        "parameter_mapping": {
+          "instance_id": "${playbook.instance_id}",
+          "region": "${playbook.region}"
+        },
+
+        "post_validation": {
+          "checks": [
+            {
+              "type": "output_variables_exist",
+              "required_variables": ["instance_state", "engine_version", "storage_encrypted"],
+              "description": "Verify instance details are retrieved"
+            },
+            {
+              "type": "instance_state",
+              "current_state": "${step1.output.instance_state}",
+              "allowed_states": ["available"],
+              "description": "Instance must be in available state for backup"
+            }
+          ],
+          "failure_action": "stop"
+        },
+
+        "timeout_seconds": 60
+      },
+
+      {
+        "step_number": 2,
+        "name": "Create manual backup snapshot",
+        "type": "script",
+        "importance": "critical",
+        "failure_action": "retry",
+
+        "retry_config": {
+          "max_attempts": 3,
+          "backoff_seconds": [30, 60, 120],
+          "retry_on_exit_codes": [1, 2],
+          "retry_on_errors": ["ThrottlingException", "RequestLimitExceeded"]
+        },
+
+        "pre_validation": {
+          "checks": [
+            {
+              "type": "parameter_exists",
+              "parameters": ["instance_id"],
+              "description": "Verify required parameters from previous step"
+            },
+            {
+              "type": "previous_step_output_exists",
+              "step_number": 1,
+              "required_outputs": ["instance_state", "engine_version"],
+              "description": "Need instance details from step 1"
+            },
+            {
+              "type": "instance_state",
+              "current_state": "${step1.output.instance_state}",
+              "allowed_states": ["available"],
+              "description": "Can only snapshot available instances"
+            },
+            {
+              "type": "permission_check",
+              "required_permissions": [
+                "rds:CreateDBSnapshot",
+                "rds:DescribeDBSnapshots",
+                "rds:AddTagsToResource"
+              ],
+              "description": "Verify IAM permissions for snapshot creation"
+            }
+          ],
+          "timeout_seconds": 30,
+          "failure_action": "stop"
+        },
+
+        "script_ref": {
+          "script_id": "aws-rds-create-manual-snapshot",
+          "version": "2.1.0"
+        },
+
+        "parameter_mapping": {
+          "instance_id": "${playbook.instance_id}",
+          "snapshot_name": "pre-upgrade-${playbook.instance_id}-${execution.timestamp}",
+          "tags": {
+            "Purpose": "pre-upgrade-backup",
+            "OriginalVersion": "${step1.output.engine_version}",
+            "TargetVersion": "${playbook.target_engine_version}",
+            "PlaybookExecution": "${execution.id}"
+          }
+        },
+
+        "post_validation": {
+          "checks": [
+            {
+              "type": "output_variables_exist",
+              "required_variables": ["snapshot_id", "snapshot_arn", "status"],
+              "description": "Verify snapshot creation outputs"
+            },
+            {
+              "type": "snapshot_state",
+              "snapshot_id": "${step2.output.snapshot_id}",
+              "expected_states": ["creating", "available"],
+              "description": "Verify snapshot is being created",
+              "polling": {
+                "enabled": true,
+                "interval_seconds": 30,
+                "max_attempts": 60,
+                "success_states": ["available"],
+                "failure_states": ["failed", "deleted"],
+                "description": "Wait for snapshot to become available (up to 30 minutes)"
+              }
+            },
+            {
+              "type": "output_format",
+              "variable": "snapshot_id",
+              "format": "^arn:aws:rds:[a-z0-9-]+:\\d+:snapshot:.+$|^[a-zA-Z][a-zA-Z0-9-]{0,254}$",
+              "description": "Verify snapshot ID or ARN format is valid"
+            }
+          ],
+          "timeout_seconds": 1800,
+          "failure_action": "stop"
+        },
+
+        "timeout_seconds": 1800
+      },
+
+      {
+        "step_number": 3,
+        "name": "Verify backup integrity",
+        "type": "script",
+        "importance": "critical",
+        "failure_action": "stop",
+
+        "pre_validation": {
+          "checks": [
+            {
+              "type": "previous_step_output_exists",
+              "step_number": 2,
+              "required_outputs": ["snapshot_id", "status"],
+              "description": "Need snapshot details from step 2"
+            },
+            {
+              "type": "state_value_check",
+              "variable": "${step2.output.status}",
+              "expected_values": ["available"],
+              "description": "Snapshot must be available before verification"
+            }
+          ],
+          "failure_action": "stop"
+        },
+
+        "script_ref": {
+          "script_id": "aws-rds-verify-snapshot-integrity",
+          "version": "1.2.0"
+        },
+
+        "parameter_mapping": {
+          "snapshot_id": "${step2.output.snapshot_id}",
+          "expected_size_gb": "${step1.output.allocated_storage}",
+          "expected_encrypted": "${step1.output.storage_encrypted}"
+        },
+
+        "post_validation": {
+          "checks": [
+            {
+              "type": "output_variables_exist",
+              "required_variables": ["integrity_status", "snapshot_size_gb", "encryption_verified"],
+              "description": "Verify all integrity checks completed"
+            },
+            {
+              "type": "state_value_check",
+              "variable": "${step3.output.integrity_status}",
+              "expected_values": ["verified", "passed"],
+              "description": "Backup integrity must be verified before proceeding"
+            }
+          ],
+          "failure_action": "stop"
+        },
+
+        "timeout_seconds": 300
+      },
+
+      {
+        "step_number": 4,
+        "name": "Perform database engine upgrade",
+        "type": "script",
+        "importance": "critical",
+        "failure_action": "stop",
+
+        "pre_validation": {
+          "checks": [
+            {
+              "type": "previous_step_output_exists",
+              "step_number": 3,
+              "required_outputs": ["integrity_status"],
+              "description": "Backup must be verified before upgrade"
+            },
+            {
+              "type": "state_value_check",
+              "variable": "${step3.output.integrity_status}",
+              "expected_values": ["verified", "passed"],
+              "description": "Cannot proceed without verified backup"
+            },
+            {
+              "type": "permission_check",
+              "required_permissions": [
+                "rds:ModifyDBInstance",
+                "rds:DescribeDBInstances"
+              ],
+              "description": "Verify permissions for upgrade operation"
+            }
+          ],
+          "timeout_seconds": 30,
+          "failure_action": "stop"
+        },
+
+        "script_ref": {
+          "script_id": "aws-rds-upgrade-engine-version",
+          "version": "3.0.0"
+        },
+
+        "parameter_mapping": {
+          "instance_id": "${playbook.instance_id}",
+          "target_version": "${playbook.target_engine_version}",
+          "apply_immediately": true,
+          "backup_snapshot_id": "${step2.output.snapshot_id}"
+        },
+
+        "post_validation": {
+          "checks": [
+            {
+              "type": "output_variables_exist",
+              "required_variables": ["upgrade_status", "new_engine_version"],
+              "description": "Verify upgrade outputs"
+            },
+            {
+              "type": "instance_state",
+              "instance_id": "${playbook.instance_id}",
+              "expected_states": ["upgrading", "available"],
+              "description": "Verify instance is upgrading or completed",
+              "polling": {
+                "enabled": true,
+                "interval_seconds": 60,
+                "max_attempts": 120,
+                "success_states": ["available"],
+                "failure_states": ["failed", "incompatible-parameters"],
+                "description": "Wait for upgrade to complete (up to 2 hours)"
+              }
+            },
+            {
+              "type": "state_value_check",
+              "variable": "${step4.output.new_engine_version}",
+              "expected_values": ["${playbook.target_engine_version}"],
+              "description": "Verify upgrade reached target version"
+            }
+          ],
+          "timeout_seconds": 7200,
+          "failure_action": "stop"
+        },
+
+        "timeout_seconds": 7200
+      },
+
+      {
+        "step_number": 5,
+        "name": "Tag backup snapshot with retention policy",
+        "type": "script",
+        "importance": "low",
+        "failure_action": "ignore",
+
+        "script_ref": {
+          "script_id": "aws-rds-tag-snapshot-retention",
+          "version": "1.0.0"
+        },
+
+        "parameter_mapping": {
+          "snapshot_id": "${step2.output.snapshot_id}",
+          "retention_days": "${playbook.backup_retention_days}",
+          "tags": {
+            "UpgradeStatus": "completed",
+            "NewVersion": "${step4.output.new_engine_version}",
+            "RetentionDays": "${playbook.backup_retention_days}"
+          }
+        },
+
+        "post_validation": {
+          "checks": [
+            {
+              "type": "output_variables_exist",
+              "required_variables": ["tags_applied"],
+              "description": "Verify tagging completed"
+            }
+          ],
+          "failure_action": "ignore"
+        },
+
+        "timeout_seconds": 60
+      }
+    ]
+  },
+
+  "explain_plan": {
+    "steps": [
+      {
+        "step": 1,
+        "action": "Verify RDS instance exists and retrieve current state",
+        "reasoning": "Ensures instance exists and is in a state that allows backup creation",
+        "expected_outcome": "Instance details retrieved, state confirmed as 'available'",
+        "risk": "low",
+        "reversible": true
+      },
+      {
+        "step": 2,
+        "action": "Create manual backup snapshot of the database",
+        "reasoning": "Critical safety measure - ensures we can restore if upgrade fails",
+        "expected_outcome": "Snapshot created and verified as 'available'",
+        "risk": "low",
+        "reversible": true,
+        "notes": "Includes retry logic for transient AWS API failures. Polls until snapshot is fully available."
+      },
+      {
+        "step": 3,
+        "action": "Verify backup integrity and completeness",
+        "reasoning": "Confirms backup is valid and can be used for restore if needed",
+        "expected_outcome": "Backup integrity verified, size and encryption match source",
+        "risk": "low",
+        "reversible": true
+      },
+      {
+        "step": 4,
+        "action": "Perform in-place database engine upgrade",
+        "reasoning": "Upgrades database to target version with verified backup available",
+        "expected_outcome": "Database upgraded to target version, instance available",
+        "risk": "medium",
+        "reversible": true,
+        "notes": "Instance will be unavailable during upgrade (typically 10-60 minutes). Can rollback using snapshot from step 2."
+      },
+      {
+        "step": 5,
+        "action": "Tag snapshot with retention policy",
+        "reasoning": "Ensures backup is retained per policy and can be identified later",
+        "expected_outcome": "Snapshot tagged with retention metadata",
+        "risk": "low",
+        "reversible": true,
+        "notes": "Non-critical operation - marked as 'ignore' so failure won't block playbook"
+      }
+    ],
+    "overall_risk": "medium",
+    "estimated_duration": "30-90 minutes (depends on database size)",
+    "prerequisites": [
+      "AWS credentials with RDS permissions",
+      "Instance must be in 'available' state",
+      "Target version must be compatible with current engine version",
+      "Sufficient storage quota for snapshot creation"
+    ],
+    "rollback_strategy": "If upgrade fails, restore from snapshot created in step 2 using AWS RDS restore-from-snapshot operation"
+  },
+
+  "success_criteria": [
+    "RDS instance upgraded to target engine version",
+    "Instance returns to 'available' state",
+    "Verified backup snapshot exists and is valid",
+    "All data integrity checks pass"
+  ]
+}
+```
+
+**Why This Example Demonstrates Best Practices:**
+
+1. **Comprehensive Validation**
+   - Pre-validation checks prerequisites before each critical operation
+   - Post-validation confirms operations actually succeeded
+   - Validation checks include permissions, state, outputs, and data integrity
+
+2. **Smart Failure Handling**
+   - Critical steps (1-4) use `failure_action: "stop"` to prevent proceeding with invalid state
+   - Step 2 uses `retry` with exponential backoff for transient AWS API errors
+   - Step 5 uses `ignore` since tagging is non-critical
+
+3. **Importance Levels**
+   - Steps 1-4 marked as `"critical"` - upgrade cannot succeed without them
+   - Step 5 marked as `"low"` - nice to have but not essential
+
+4. **Polling for Eventual Consistency**
+   - Step 2 polls snapshot until available (up to 30 minutes)
+   - Step 4 polls instance during upgrade (up to 2 hours)
+   - Proper success/failure state detection
+
+5. **Clear Documentation**
+   - Comprehensive explain plan with reasoning for each step
+   - Risk assessment and rollback strategy documented
+   - Prerequisites and success criteria clearly defined
+
+6. **Parameter Design**
+   - Required vs optional parameters clearly marked
+   - Validation rules with helpful error messages
+   - Safe defaults provided (backup_retention_days: 7)
+
+7. **Security & Safety**
+   - Permission checks before critical operations
+   - Verified backup before destructive upgrade
+   - Proper tagging for auditability and retention
+
+This playbook would receive a quality score of **95+/100** and be featured in search results.
+
 ---
 
 ## Related Documentation
@@ -3847,3 +5044,164 @@ Key validations include:
 - [Playbook Service (Client)](../../04-services/playbook-service/README.md) - Client-side playbook management
 - [Storage Service](../../04-services/storage-service/README.md) - RAG module used by agent
 - [Storage Service Collections](../../04-services/storage-service/collections.md) - user_playbooks schema
+---
+
+## Appendix: Implementation Details
+
+This appendix contains technical implementation details, code examples, and API specifications for developers building or extending the Playbook Agent.
+
+## Implementation
+
+### Rust Service Structure
+
+```rust
+use storage_service::{StorageService, StorageConfig, QdrantMode};
+use std::sync::Arc;
+
+pub struct PlaybookAgent {
+    storage: Arc<StorageService>,
+    config: PlaybookAgentConfig,
+}
+
+pub struct PlaybookAgentConfig {
+    pub qdrant_url: String,
+    pub embedding_service_url: String,
+}
+
+impl PlaybookAgent {
+    pub async fn new(config: PlaybookAgentConfig) -> Result<Self> {
+        // Initialize storage service in remote mode
+        let storage_config = StorageConfig {
+            qdrant: QdrantConfig {
+                mode: QdrantMode::Remote,
+                storage_path: None,
+                url: Some(config.qdrant_url.clone()),
+            },
+            embedding: EmbeddingConfig {
+                provider: EmbeddingProvider::Server {
+                    endpoint: config.embedding_service_url.clone(),
+                    api_key: None,
+                },
+                model: "text-embedding-3-small".to_string(),
+                dimension: 384,
+            },
+            encryption: EncryptionConfig {
+                enabled: false,  // Server: metadata only, no encryption
+            },
+            ..Default::default()
+        };
+
+        let storage = Arc::new(StorageService::new(storage_config).await?);
+
+        Ok(Self { storage, config })
+    }
+}
+```
+
+### Key Methods (to be implemented)
+
+```rust
+impl PlaybookAgent {
+    // Search across escher_library + tenant playbooks
+    pub async fn search_playbooks(
+        &self,
+        query: &str,
+        tenant_id: &str,
+        filters: Option<PlaybookFilters>,
+        limit: usize,
+    ) -> Result<Vec<RankedPlaybook>>;
+
+    // Publish user playbook metadata to tenant collection
+    pub async fn publish_metadata(
+        &self,
+        tenant_id: &str,
+        metadata: &PlaybookMetadata,
+        scripts: &HashMap<String, String>,  // format -> S3 path
+    ) -> Result<String>;
+
+    // Update playbook status (pending_review → approved)
+    pub async fn update_status(
+        &self,
+        tenant_id: &str,
+        playbook_id: &str,
+        version: &str,
+        new_status: &str,
+    ) -> Result<()>;
+
+    // Delete playbook metadata
+    pub async fn delete_metadata(
+        &self,
+        tenant_id: &str,
+        playbook_id: &str,
+        version: &str,
+    ) -> Result<()>;
+
+    // Update execution statistics
+    pub async fn update_execution_stats(
+        &self,
+        tenant_id: &str,
+        playbook_id: &str,
+        version: &str,
+        success: bool,
+    ) -> Result<()>;
+}
+```
+
+---
+
+## API
+
+### HTTP Endpoints (Axum)
+
+```rust
+use axum::{Router, routing::{get, post, delete}, Json};
+
+pub fn router() -> Router {
+    Router::new()
+        .route("/api/playbook/search", post(search_playbooks))
+        .route("/api/playbook/metadata/publish", post(publish_metadata))
+        .route("/api/playbook/metadata/:tenant_id/:playbook_id/:version/status",
+               post(update_status))
+        .route("/api/playbook/metadata/:tenant_id/:playbook_id/:version",
+               delete(delete_metadata))
+        .route("/api/playbook/stats/:tenant_id/:playbook_id/:version",
+               post(update_stats))
+}
+```
+
+---
+
+## Next Steps
+
+---
+
+## Appendix: Why LLM + RAG Works Better Than Just Search
+
+### Traditional Keyword Search ❌
+```
+Query: "Stop production RDS for weekend"
+→ Matches: playbooks containing words "stop", "rds", "production"
+→ Problem: Misses semantic meaning (cost optimization, time-based)
+→ Problem: Can't explain why one is better than another
+```
+
+### Vector Search Only ⚠️
+```
+Query: "Stop production RDS for weekend"
+→ Embedding similarity finds related playbooks
+→ Better: Understands "shutdown" = "stop", "weekend" relates to "cost-saving"
+→ Problem: Still can't reason about which is BEST for user's context
+```
+
+### LLM + RAG ✅
+```
+Query: "Stop production RDS for weekend"
+→ LLM understands: cost optimization, weekend automation, production safety
+→ RAG finds: candidates with semantic similarity
+→ LLM evaluates: success rates, prerequisites, user's environment
+→ LLM explains: "Use your custom playbook because it has environment-specific logic..."
+→ User gets: Ranked options with clear reasoning
+```
+
+---
+
