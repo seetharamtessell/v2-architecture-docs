@@ -135,7 +135,7 @@ The **Escher Client** is a **Tauri-based desktop application** that provides cha
 │            FRONTEND (React + TypeScript)                    │
 │  • MVC Architecture (Models, Views, Controllers, Services)  │
 │  • 8 Complete User Flows (Login → Chat → Execution)        │
-│  • 30+ UI Agent Components (Dynamic Rendering)              │
+│  • UI Rendering Engine + 30+ UI Components                  │
 │  • AWS Cognito Authentication with JWT                      │
 │  • 70+ Tauri Commands, 15+ Events                           │
 └─────────────────────────────────────────────────────────────┘
@@ -169,7 +169,7 @@ The **Escher Client** is a **Tauri-based desktop application** that provides cha
 
 **Views** (Presentation):
 - Pure React components
-- UI Agent components for dynamic rendering
+- UI Components for dynamic rendering (server specs → client render)
 - Responsive design
 
 **Controllers** (Business Logic):
@@ -194,9 +194,9 @@ The **Escher Client** is a **Tauri-based desktop application** that provides cha
 7. **Alert Management** - Real-time and scheduled alerts
 8. **Settings & Configuration** - Account management, preferences
 
-### 30+ UI Agent Components (Dynamic Rendering)
+### 30+ UI Components (Dynamic Rendering)
 
-Server returns JSON that renders as dynamic components:
+Server-side UI Agent returns JSON, client-side UI Rendering Engine maps to React components:
 - ChatMessage, ConfirmationCard, ResourceCard
 - ExecutionPlanCard, ProgressCard, ErrorCard
 - CostSummaryCard, SecurityAlertCard
@@ -765,7 +765,7 @@ Users can switch between models:
 **Client Frontend** (Complete):
 - ✅ MVC architecture (25+ documents)
 - ✅ 8 user flows documented
-- ✅ 30+ UI Agent components defined
+- ✅ UI Agent (server-side) + UI Rendering Engine + 30+ UI Components defined
 - ✅ Authentication & security architecture
 - ✅ 70+ Tauri commands, 15+ events
 

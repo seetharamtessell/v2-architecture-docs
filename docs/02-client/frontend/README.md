@@ -8,7 +8,7 @@
 
 ## Overview
 
-The Escher frontend is a **Tauri-based desktop application** that provides a chat-driven interface for AWS cloud operations. It implements an **MVC architecture** with server-driven UI rendering powered by UI Agent components.
+The Escher frontend is a **Tauri-based desktop application** that provides a chat-driven interface for cloud operations. It implements an **MVC architecture** with server-driven UI rendering powered by the UI Rendering Engine and UI Components library.
 
 ---
 
@@ -19,7 +19,8 @@ The Escher frontend is a **Tauri-based desktop application** that provides a cha
 │                    VIEWS                            │
 │  Pure React Components (Presentation Layer)         │
 │  • Feature Views (Chat, Reports, Estate, etc.)     │
-│  • UI Agent Components (Dynamic Rendering)          │
+│  • UI Components (30+ React components)             │
+│  • UI Rendering Engine (Dynamic orchestrator)       │
 └─────────────────────────────────────────────────────┘
                         ↕
 ┌─────────────────────────────────────────────────────┐
@@ -53,8 +54,9 @@ The Escher frontend is a **Tauri-based desktop application** that provides a cha
 ## Key Features
 
 ### 1. **Server-Driven UI**
-- Server sends UI specifications
-- Frontend renders dynamically using UI Agent components
+- Server-side UI Agent generates UI specifications
+- UI Rendering Engine (client-side) maps specs to React components
+- UI Components library (30+ components) renders the actual UI
 - Two-phase rendering: Stream (text) → Enhancement (rich UI)
 
 ### 2. **MVC Architecture**
@@ -133,7 +135,8 @@ The frontend supports 8 complete user flows:
 **Frontend Design** (Complete):
 - [MVC Architecture](./mvc-architecture.md) - Detailed MVC design
 - [User Flows](./user-flows.md) - Complete user journey documentation (8 flows)
-- [UI Agent Components](./ui-agent-components.md) - Dynamic rendering system
+- [UI Components Package](./ui-components.md) - 30+ React presentation components
+- [UI Rendering Engine](./ui-rendering-engine.md) - Client-side rendering orchestrator
 - [Authentication & Security](./authentication-security.md) - Cognito + JWT + OS Keychain
 
 **Tauri Integration** (Complete):
@@ -212,7 +215,7 @@ The frontend supports 8 complete user flows:
 ## Next Steps
 
 - Implement core MVC structure
-- Integrate UI Agent components package
+- Integrate UI Components package and UI Rendering Engine
 - Build Tauri command interfaces
 - Setup WebSocket client
 - Implement authentication flow

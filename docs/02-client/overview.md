@@ -58,7 +58,8 @@ The client is organized into separate, focused modules:
 |-----------|--------|-------------|
 | **[MVC Architecture](frontend/mvc-architecture.md)** | ✅ Complete | Models, Views, Controllers, Services |
 | **[User Flows](frontend/user-flows.md)** | ✅ Complete | 8 complete user journeys |
-| **[UI Agent Components](frontend/ui-agent-components.md)** | ✅ Complete | Dynamic rendering system (30+ components) |
+| **[UI Components Package](frontend/ui-components.md)** | ✅ Complete | 30+ React presentation components |
+| **[UI Rendering Engine](frontend/ui-rendering-engine.md)** | ✅ Complete | Client-side rendering orchestrator |
 | **[Authentication](frontend/authentication-security.md)** | ✅ Complete | Cognito + JWT + OS Keychain |
 
 ### [Tauri Integration](tauri-integration/) (IPC Bridge)

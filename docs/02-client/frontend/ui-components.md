@@ -1,14 +1,28 @@
-# UI Agent Components Package
+# UI Components Package
 
-**Package Name**: `@escher/ui-agent-components`
-**Purpose**: Standalone npm package for server-driven dynamic UI rendering
+**Package Name**: `@escher/ui-components`
+**Purpose**: Standalone npm package of 30+ React UI components for dynamic rendering
 **Status**: Design Complete
 
 ---
 
 ## Overview
 
-The UI Agent Components package is a **standalone, reusable library** that provides dynamic UI components based on server specifications. It enables server-driven UI architecture where the server decides what to display and the frontend has all components ready to render.
+The UI Components package is a **standalone, reusable library** of 30+ React presentation components. These components receive structured data from the **UI Rendering Engine** (which processes specs from the server-side **UI Agent**) and render rich, interactive UIs.
+
+### Architecture Context
+
+```
+Server-Side UI Agent (docs/03-server/agents/ui-agent.md)
+    ↓ (generates structured JSON)
+Client-Side UI Rendering Engine (ui-rendering-engine.md)
+    ↓ (maps to components)
+UI Components Package (THIS PACKAGE)
+    ↓ (renders UI)
+React Display
+```
+
+**This package contains**: Pure presentation React components (NO business logic, NO server knowledge)
 
 ---
 
@@ -655,11 +669,17 @@ View re-renders with execution progress
 
 ## Key Takeaway
 
-The UI Agent Components package provides a **complete library of dynamic UI components** that can render any server-specified UI. It enables true server-driven architecture where:
+The UI Components package provides a **complete library of 30+ React presentation components** that work with the server-driven architecture:
 
-- Server decides what to display
-- Frontend has all components ready
+**Complete Flow**:
+1. **Server-Side UI Agent** (in Escher AI Server) generates structured UI specifications
+2. **UI Rendering Engine** (client-side) receives specs and maps to components
+3. **UI Components Package** (this library) renders the actual React UI
+
+**Benefits**:
+- Server controls presentation logic (via UI Agent)
+- Frontend remains simple and flexible (just components)
 - No frontend code changes needed for new UIs
-- Clean separation between UI and business logic
+- Clean separation: Server (intelligence) + Client (presentation)
 
-This creates a powerful, flexible, and maintainable UI system.
+This creates truly scalable, dynamic, AI-powered UI where adding new visualizations requires ZERO frontend changes.

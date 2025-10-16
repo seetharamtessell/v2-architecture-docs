@@ -39,7 +39,8 @@ docs/
 │   │   ├── README.md
 │   │   ├── mvc-architecture.md   ✅ Complete (MVC pattern)
 │   │   ├── user-flows.md         ✅ Complete (8 flows)
-│   │   ├── ui-agent-components.md ✅ Complete (30+ components)
+│   │   ├── ui-components.md ✅ Complete (30+ presentation components)
+│   │   ├── ui-rendering-engine.md ✅ Complete (client-side orchestrator)
 │   │   └── authentication-security.md ✅ Complete (Cognito + JWT)
 │   ├── tauri-integration/ # IPC Bridge (Frontend ↔ Rust)
 │   │   ├── README.md
@@ -60,6 +61,7 @@ docs/
 ├── 03-server/            # Server ecosystem (its own complex world)
 │   ├── agents/           # Multi-agent system
 │   │   ├── overview.md
+│   │   ├── ui-agent.md           ✅ Complete (comprehensive) - Server-side UI intelligence
 │   │   └── playbook-agent.md     ✅ Complete (~2,227 lines) - LLM + RAG intelligence
 │   ├── microservices/    # Service-oriented architecture
 │   ├── data/             # Redis, Qdrant (playbooks), Git repo
@@ -167,7 +169,9 @@ Use the [adr/template.md](adr/template.md) for consistency.
 
 ### Client Frontend Architecture
 - **MVC Pattern**: Models (Zustand stores), Views (React components), Controllers (business logic), Services (Tauri/WebSocket/API)
-- **UI Agent Components**: 30+ dynamic components for server-driven UI rendering
+- **UI Components**: 30+ React presentation components for dynamic rendering
+- **UI Rendering Engine**: Client-side orchestrator that maps server UI specifications to React components
+- **Server-Driven UI**: Server-side UI Agent generates specifications, client-side Rendering Engine executes
 - **Tauri Integration**: 70+ commands, 15+ events connecting React frontend to Rust backend
 - **Authentication**: AWS Cognito with JWT tokens stored in OS Keychain
 
@@ -215,6 +219,16 @@ These are **Rust crates** (like npm packages) used by both client and server:
 **Key Insight**: Same Rust code, different deployment contexts. Client has full data + encryption, server has metadata + S3 references.
 
 ### Server Agent System
+- **UI Agent** (Server-Side Presentation Intelligence): Transforms raw backend responses into structured UI specifications
+  - **Purpose**: Server-side intelligence that decides optimal UI presentation
+  - **Input**: Raw responses from other agents (Cost Agent, Analysis Agent, etc.)
+  - **Output**: Structured JSON with UI markers + dual outputs (UI mode + history digest)
+  - **Template vs Dynamic**: 20% fast templates (<200ms) vs 80% LLM-powered dynamic (<1.5s)
+  - **30+ Component Vocabulary**: Complete registry for dynamic UI generation
+  - **Dual Outputs**: UI mode (5 KB, full components) + history digest (300 bytes, 20x smaller for LLM context)
+  - **Key Benefit**: Makes frontend infinitely scalable - add visualizations without backend changes
+  - **Documentation**: [docs/03-server/agents/ui-agent.md](docs/03-server/agents/ui-agent.md)
+
 - **Playbook Agent**: LLM + RAG intelligent playbook search and recommendation
   - **4-Step Intelligence Flow**: LLM Intent Understanding → RAG Vector Search → LLM Ranking & Reasoning → Package & Return
   - **Server-Side RAG**: Embedded Qdrant with `escher_library` (global) and `tenant_{id}_playbooks` (per-tenant) collections
@@ -223,6 +237,8 @@ These are **Rust crates** (like npm packages) used by both client and server:
   - **Storage Strategy**: Metadata + S3 paths in RAG, full scripts in S3 (escher-library and escher-tenant-data buckets)
   - **Review Workflow**: User uploads → pending_review → approved/rejected → active (with state transitions)
   - **What's in RAG**: Metadata (name, description, keywords, status, execution stats) + S3 script paths (NOT full scripts)
+  - **Documentation**: [docs/03-server/agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md)
+
 - **Classification Agent**: Intent recognition and routing
 - **Operations Agent**: Script generation from playbooks
 - **Validation Agent**: Feasibility and safety checks

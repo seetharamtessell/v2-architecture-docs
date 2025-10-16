@@ -465,7 +465,7 @@ Generate visual analytics reports
 - **View**: Same as Ops Chat (MessageItem with DynamicRenderer)
 - **Controller**: ChatController
 - **Service**: WebSocketService
-- **UI Agent**: Chart, Table, Card components from package
+- **UI Components**: Chart, Table, Card components from UI Components package
 
 ### Report Types
 - Cost reports (monthly/quarterly/yearly)

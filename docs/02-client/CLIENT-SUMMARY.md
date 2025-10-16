@@ -12,7 +12,7 @@ The **Escher Client** is a **Tauri-based desktop application** that provides a c
 - 🏗️ **Local AWS Estate Management** - Sync and store AWS resources locally
 - 🔍 **Semantic Search** - Fast resource lookup using Qdrant vector DB
 - ⚡ **Secure Execution** - Run AWS CLI commands with user approval
-- 🎨 **Server-Driven UI** - Dynamic rendering with UI Agent components
+- 🎨 **Server-Driven UI** - Dynamic rendering with UI Rendering Engine and 30+ UI Components
 - 🔐 **Credential Security** - AWS credentials never leave the device
 
 ---
@@ -24,7 +24,7 @@ The **Escher Client** is a **Tauri-based desktop application** that provides a c
 │                    FRONTEND (React + TypeScript)            │
 │  • MVC Architecture (Models, Views, Controllers, Services)  │
 │  • 8 Complete User Flows (Login → Chat → Execution)        │
-│  • 30+ UI Agent Components (Dynamic Rendering)              │
+│  • UI Rendering Engine + 30+ UI Components                  │
 │  • AWS Cognito Authentication                               │
 └─────────────────────────────────────────────────────────────┘
                               ↕
@@ -74,7 +74,7 @@ The **Escher Client** is a **Tauri-based desktop application** that provides a c
 │            VIEWS (Presentation)             │
 │  Pure React Components                      │
 │  • OpsChatView, EstateScanView, etc.       │
-│  • UI Agent Components (Dynamic)            │
+│  • UI Components (30+ presentation)         │
 └─────────────────────────────────────────────┘
                     ↕
 ┌─────────────────────────────────────────────┐
@@ -139,7 +139,7 @@ src/
 
 #### 1. **Server-Driven UI**
 - Server sends UI specifications in enhancement messages
-- Frontend renders dynamically using UI Agent components
+- Server-side UI Agent generates specifications, client-side UI Rendering Engine maps to React components
 - **Two-phase rendering**: Stream (text, immediate) → Enhancement (rich UI, 1-2s later)
 - Users never wait for rich UI to start interacting
 
