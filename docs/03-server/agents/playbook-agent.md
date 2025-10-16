@@ -1,7 +1,7 @@
 # Playbook Agent
 
-**Role**: Intelligent playbook search and recommendation service
-**Type**: Server-side Rust service using storage-service crate
+**Role**: LLM + RAG intelligent playbook discovery, ranking, and orchestration engine
+**Type**: Server-side Rust service using storage-service crate + LLM integration (Claude/GPT)
 **Location**: Runs on Escher server (ECS/EC2 with EBS/EFS volume)
 
 ---
@@ -9,15 +9,20 @@
 ## Table of Contents
 
 1. [What It Does](#what-it-does)
-2. [Core Capabilities](#core-capabilities)
-3. [How It Works](#how-it-works)
-4. [Playbook Lifecycle & States](#playbook-lifecycle--states)
-5. [RAG Search Examples](#rag-search-examples)
-6. [Playbook Structure Reference](#playbook-structure-reference)
-7. [Storage Strategies](#storage-strategies)
-8. [S3 Storage Structure](#s3-storage-structure)
-9. [Architecture](#architecture)
-10. [API Reference](#api-reference)
+2. [Core Architecture Principles](#core-architecture-principles)
+3. [Three Playbook Types](#three-playbook-types)
+4. [How It Works: The Intelligence Flow](#how-it-works-the-intelligence-flow)
+5. [Playbook Lifecycle & States](#playbook-lifecycle-states)
+6. [Playbook Structure](#playbook-structure)
+7. [Nested Sub-Steps in Explain Plan](#nested-sub-steps-in-explain-plan)
+8. [Auto-Remediation Flow](#auto-remediation-flow)
+9. [Resume Capability](#resume-capability)
+10. [Storage Strategies](#storage-strategies)
+11. [S3 Storage Structure](#s3-storage-structure)
+12. [Architecture](#architecture)
+13. [Data Flow](#data-flow)
+14. [API](#api)
+15. [Related Documentation](#related-documentation)
 
 ---
 
@@ -31,6 +36,196 @@ The Playbook Agent is an **intelligent search and recommendation engine** powere
 4. **Returns complete playbooks** with explain plan, code, and reasoning
 
 **Key Insight**: It's not just search - it's an AI agent that understands what you're trying to do and recommends the best automation.
+
+---
+
+## Core Architecture Principles
+
+### Normalized Storage Pattern (Database-Style Foreign Keys)
+
+Playbooks and Scripts are **separated** like a normalized database:
+
+```
+┌─────────────────────────────────────────────────┐
+│           SCRIPT LIBRARY                        │
+│     (Reusable, Multi-Language)                  │
+├─────────────────────────────────────────────────┤
+│  scripts/create-rds-snapshot/v1.0.0/           │
+│  ├── metadata.json                              │
+│  │   {                                          │
+│  │     "available_types": ["bash", "python"],  │
+│  │     "default_type": "bash"                  │
+│  │   }                                          │
+│  ├── parameters.json                            │
+│  └── code/                                      │
+│      ├── bash/script.sh    ← User chooses      │
+│      ├── python/main.py    ← at runtime        │
+│      └── terraform/main.tf                      │
+└─────────────────────────────────────────────────┘
+                    ↑
+                    │ (Foreign Key Reference)
+                    │ script_ref: { script_id, version }
+                    │
+┌─────────────────────────────────────────────────┐
+│          PLAYBOOK LIBRARY                       │
+│     (Orchestration, References Only)            │
+├─────────────────────────────────────────────────┤
+│  playbooks/stop-rds-with-snapshot/v1.0.0/      │
+│  ├── metadata.json                              │
+│  ├── parameters.json                            │
+│  └── orchestration.json  ← References IDs      │
+│      {                                          │
+│        "steps": [{                              │
+│          "type": "script",                      │
+│          "script_ref": {                        │
+│            "script_id": "create-rds-snapshot", │
+│            "version": "1.0.0"                   │
+│          }                                      │
+│        }]                                       │
+│      }                                          │
+└─────────────────────────────────────────────────┘
+```
+
+**Benefits**:
+- ✅ **Script Reusability**: One script used by multiple playbooks
+- ✅ **Independent Versioning**: Update script without touching playbooks
+- ✅ **Multi-Implementation**: Same script in bash/python/node/terraform/cloudformation
+- ✅ **User Choice**: Select implementation at execution time
+
+---
+
+## Three Playbook Types
+
+### Type 1: Pure Script Playbook
+
+**Definition**: Playbook that only executes scripts (no sub-playbook calls)
+
+**Example**: "stop-rds-instance"
+
+```
+playbooks/stop-rds-instance/v1.0.0/
+├── metadata.json
+├── parameters.json
+└── orchestration.json
+    {
+      "steps": [
+        {
+          "step_number": 1,
+          "type": "script",
+          "script_ref": {
+            "script_id": "check-rds-state",
+            "version": "1.0.0"
+          }
+        },
+        {
+          "step_number": 2,
+          "type": "script",
+          "script_ref": {
+            "script_id": "stop-rds-instance",
+            "version": "1.0.0"
+          }
+        }
+      ]
+    }
+```
+
+**Characteristics**:
+- References only script_ids
+- Self-contained execution
+- No nested playbooks
+
+---
+
+### Type 2: Pure Orchestration Playbook
+
+**Definition**: Playbook that only calls other playbooks (no direct scripts)
+
+**Example**: "stop-rds-with-snapshot"
+
+```
+playbooks/stop-rds-with-snapshot/v1.0.0/
+├── metadata.json
+├── parameters.json
+└── orchestration.json
+    {
+      "steps": [
+        {
+          "step_number": 1,
+          "type": "playbook",
+          "playbook_ref": {
+            "playbook_id": "create-rds-snapshot",
+            "version": "1.0.0"
+          }
+        },
+        {
+          "step_number": 2,
+          "type": "playbook",
+          "playbook_ref": {
+            "playbook_id": "stop-rds-instance",
+            "version": "2.0.0"
+          }
+        }
+      ]
+    }
+```
+
+**Characteristics**:
+- References only playbook_ids
+- Pure coordination logic
+- Builds complex workflows from simple building blocks
+
+**Benefits**:
+- **Reusability**: "create-rds-snapshot" used by 10+ parent playbooks
+- **Maintainability**: Update child → all parents benefit
+- **Composition**: Complex operations from simple primitives
+
+---
+
+### Type 3: Hybrid Playbook
+
+**Definition**: Playbook that mixes script calls + playbook calls
+
+**Example**: "backup-and-stop-rds"
+
+```
+playbooks/backup-and-stop-rds/v1.0.0/
+├── metadata.json
+├── parameters.json
+└── orchestration.json
+    {
+      "steps": [
+        {
+          "step_number": 1,
+          "type": "playbook",
+          "playbook_ref": {
+            "playbook_id": "create-rds-snapshot",
+            "version": "1.0.0"
+          }
+        },
+        {
+          "step_number": 2,
+          "type": "script",
+          "script_ref": {
+            "script_id": "verify-backup",
+            "version": "1.0.0"
+          }
+        },
+        {
+          "step_number": 3,
+          "type": "playbook",
+          "playbook_ref": {
+            "playbook_id": "stop-rds-instance",
+            "version": "2.0.0"
+          }
+        }
+      ]
+    }
+```
+
+**Characteristics**:
+- Mix of script_refs + playbook_refs
+- Most flexible type
+- Allows custom logic between orchestrated steps
 
 ---
 
@@ -874,21 +1069,15 @@ v1.0.0 (deprecated, 100% success, 180 days) → Rank 3
 
 ---
 
-## RAG Search Examples
-
-### Example 1: Simple Query
-
----
-
 ## Playbook Structure
 
 ### Complete Playbook Format
 
 A playbook consists of:
 1. **metadata.json** - Core metadata and configuration
-2. **Execution formats** - Shell, CloudFormation/ARM, Terraform, Python scripts
-3. **Parameters** - Input parameters with auto-fill strategies
-4. **Explain plan** - Human-readable explanation
+2. **orchestration.json** - Step definitions with script/playbook references (NEW)
+3. **parameters.json** - Input parameters with auto-fill strategies
+4. **explain_plan.json** - Human-readable explanation with nested sub-steps
 
 ### 1. Metadata.json Structure
 
@@ -1038,76 +1227,558 @@ A playbook consists of:
 | `static` | Use fixed value | Default region "us-west-2" |
 | `prompt` | Ask user (no auto-fill) | Custom notes or confirmation |
 
-### 3. Execution Formats
+### 3. orchestration.json Structure (NEW)
 
-Each playbook can have up to 4 execution formats:
+**Purpose**: Defines the execution sequence using references to scripts and playbooks
+
+#### Format for Pure Script Playbook
 
 ```json
 {
-  "execution_formats": {
-    "shell": {
-      "content": "#!/bin/bash\nset -e\n\n# Weekend RDS Shutdown Script\n...",
-      "entry_point": "main.sh",
-      "size_bytes": 4096,
-      "checksum": "sha256:abc123...",
-      "dependencies": [],
-      "permissions_required": [
-        "rds:StopDBInstance",
-        "rds:DescribeDBInstances",
-        "rds:CreateDBSnapshot"
-      ]
-    },
-
-    "cloudformation": {
-      "content": "AWSTemplateFormatVersion: '2010-09-09'\n...",
-      "entry_point": "template.yaml",
-      "size_bytes": 2048,
-      "checksum": "sha256:def456...",
-      "stack_name_template": "rds-weekend-shutdown-{instance_id}",
-      "permissions_required": [
-        "cloudformation:CreateStack",
-        "cloudformation:UpdateStack",
-        "rds:StopDBInstance"
-      ]
-    },
-
-    "terraform": {
-      "content": "terraform {\n  required_version = \">= 1.0\"\n}\n...",
-      "entry_point": "main.tf",
-      "size_bytes": 3072,
-      "checksum": "sha256:ghi789...",
-      "terraform_version": ">=1.0",
-      "providers": {
-        "aws": "~> 5.0"
+  "orchestration_version": "1.0",
+  "steps": [
+    {
+      "step_number": 1,
+      "name": "Check RDS instance state",
+      "type": "script",
+      "script_ref": {
+        "script_id": "check-rds-state",
+        "version": "1.0.0",
+        "implementation": "bash"
       },
-      "backend": "local",
-      "permissions_required": [
-        "rds:StopDBInstance",
-        "rds:DescribeDBInstances"
-      ]
-    },
-
-    "python": {
-      "content": "import boto3\nimport sys\n\ndef stop_rds_instance():\n    ...",
-      "entry_point": "stop_rds.py",
-      "size_bytes": 5120,
-      "checksum": "sha256:jkl012...",
-      "python_version": ">=3.8",
-      "dependencies": {
-        "boto3": ">=1.26.0",
-        "botocore": ">=1.29.0"
+      "parameter_mapping": {
+        "instance_id": "${playbook.instance_id}",
+        "region": "${playbook.region}"
       },
-      "permissions_required": [
-        "rds:StopDBInstance",
-        "rds:DescribeDBInstances",
-        "rds:CreateDBSnapshot"
-      ]
+      "continue_on_error": false,
+      "timeout_seconds": 30
+    },
+    {
+      "step_number": 2,
+      "name": "Create RDS snapshot",
+      "type": "script",
+      "script_ref": {
+        "script_id": "create-rds-snapshot",
+        "version": "2.1.0",
+        "implementation": "python"
+      },
+      "parameter_mapping": {
+        "instance_id": "${playbook.instance_id}",
+        "snapshot_name": "${playbook.snapshot_name}",
+        "region": "${playbook.region}"
+      },
+      "continue_on_error": false,
+      "timeout_seconds": 300
+    },
+    {
+      "step_number": 3,
+      "name": "Stop RDS instance",
+      "type": "script",
+      "script_ref": {
+        "script_id": "stop-rds-instance",
+        "version": "1.0.0",
+        "implementation": "bash"
+      },
+      "parameter_mapping": {
+        "instance_id": "${playbook.instance_id}",
+        "region": "${playbook.region}"
+      },
+      "continue_on_error": false,
+      "timeout_seconds": 600
     }
-  }
+  ]
 }
 ```
 
-### 4. Explain Plan Structure
+#### Format for Pure Orchestration Playbook
+
+```json
+{
+  "orchestration_version": "1.0",
+  "steps": [
+    {
+      "step_number": 1,
+      "name": "Create RDS snapshot",
+      "type": "playbook",
+      "playbook_ref": {
+        "playbook_id": "create-rds-snapshot",
+        "version": "1.0.0"
+      },
+      "parameter_mapping": {
+        "instance_id": "${playbook.instance_id}",
+        "snapshot_name": "${playbook.snapshot_name}"
+      },
+      "continue_on_error": false
+    },
+    {
+      "step_number": 2,
+      "name": "Stop RDS instance",
+      "type": "playbook",
+      "playbook_ref": {
+        "playbook_id": "stop-rds-instance",
+        "version": "2.0.0"
+      },
+      "parameter_mapping": {
+        "instance_id": "${playbook.instance_id}"
+      },
+      "continue_on_error": false
+    }
+  ]
+}
+```
+
+#### Format for Hybrid Playbook
+
+```json
+{
+  "orchestration_version": "1.0",
+  "steps": [
+    {
+      "step_number": 1,
+      "name": "Create RDS snapshot",
+      "type": "playbook",
+      "playbook_ref": {
+        "playbook_id": "create-rds-snapshot",
+        "version": "1.0.0"
+      },
+      "parameter_mapping": {
+        "instance_id": "${playbook.instance_id}"
+      },
+      "continue_on_error": false
+    },
+    {
+      "step_number": 2,
+      "name": "Verify backup integrity",
+      "type": "script",
+      "script_ref": {
+        "script_id": "verify-backup",
+        "version": "1.0.0",
+        "implementation": "python"
+      },
+      "parameter_mapping": {
+        "snapshot_id": "${step1.output.snapshot_id}",
+        "instance_id": "${playbook.instance_id}"
+      },
+      "continue_on_error": false,
+      "timeout_seconds": 120
+    },
+    {
+      "step_number": 3,
+      "name": "Stop RDS instance",
+      "type": "playbook",
+      "playbook_ref": {
+        "playbook_id": "stop-rds-instance",
+        "version": "2.0.0"
+      },
+      "parameter_mapping": {
+        "instance_id": "${playbook.instance_id}"
+      },
+      "continue_on_error": false
+    }
+  ]
+}
+```
+
+#### Key Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `orchestration_version` | string | Format version (currently "1.0") |
+| `steps` | array | Ordered list of execution steps |
+| `step_number` | integer | Sequential step number (1, 2, 3...) |
+| `name` | string | Human-readable step name |
+| `type` | enum | "script" or "playbook" |
+| `script_ref` | object | Reference to script (if type=script) |
+| `playbook_ref` | object | Reference to playbook (if type=playbook) |
+| `parameter_mapping` | object | Maps step parameters to playbook parameters or previous step outputs |
+| `continue_on_error` | boolean | If true, continue to next step even if this fails |
+| `timeout_seconds` | integer | Step timeout (optional, default from script metadata) |
+
+#### script_ref Structure
+
+```json
+{
+  "script_id": "create-rds-snapshot",
+  "version": "2.1.0",
+  "implementation": "python"
+}
+```
+
+**Fields**:
+- `script_id`: Unique identifier in scripts library
+- `version`: Script version (semantic versioning)
+- `implementation`: User choice of bash/python/node/terraform/cloudformation
+
+**Resolution at Runtime**:
+- Client looks up: `scripts/create-rds-snapshot/v2.1.0/code/python/`
+- Execution Engine runs the Python implementation
+- User can override implementation in UI
+
+#### playbook_ref Structure
+
+```json
+{
+  "playbook_id": "stop-rds-instance",
+  "version": "2.0.0"
+}
+```
+
+**Fields**:
+- `playbook_id`: Unique identifier in playbooks library
+- `version`: Playbook version
+
+**Resolution at Runtime**:
+- Recursively resolve referenced playbook
+- Expand sub-steps from nested playbook
+- Track hierarchy for explain plan display
+
+#### Parameter Mapping
+
+Parameters use variable substitution with these sources:
+
+| Source | Format | Example |
+|--------|--------|---------|
+| Playbook parameter | `${playbook.param_name}` | `${playbook.instance_id}` |
+| Previous step output | `${stepN.output.field}` | `${step1.output.snapshot_id}` |
+| Cloud estate context | `${estate.resource.field}` | `${estate.resource.region}` |
+| Static value | Direct value | `"us-east-1"` or `true` |
+
+**Example**:
+```json
+"parameter_mapping": {
+  "instance_id": "${playbook.instance_id}",
+  "snapshot_id": "${step1.output.snapshot_id}",
+  "region": "${estate.resource.region}",
+  "dry_run": false
+}
+```
+
+### 4. Scripts Library Structure (NEW - Normalized Storage)
+
+**Key Concept**: Scripts are stored **separately** from playbooks in a reusable library. Playbooks reference scripts via `script_id` + `version`.
+
+#### Script metadata.json
+
+Each script has metadata defining available implementations:
+
+```json
+{
+  "script_id": "create-rds-snapshot",
+  "version": "2.1.0",
+  "name": "Create RDS Snapshot",
+  "description": "Creates a manual snapshot of an RDS instance with verification",
+
+  "available_types": ["bash", "python", "node"],
+  "default_type": "bash",
+
+  "parameters": [
+    {
+      "name": "instance_id",
+      "type": "string",
+      "required": true,
+      "description": "RDS instance identifier"
+    },
+    {
+      "name": "snapshot_name",
+      "type": "string",
+      "required": true,
+      "description": "Name for the snapshot"
+    },
+    {
+      "name": "region",
+      "type": "string",
+      "required": true,
+      "description": "AWS region"
+    }
+  ],
+
+  "outputs": [
+    {
+      "name": "snapshot_id",
+      "type": "string",
+      "description": "ID of the created snapshot"
+    },
+    {
+      "name": "snapshot_arn",
+      "type": "string",
+      "description": "ARN of the snapshot"
+    }
+  ],
+
+  "cloud_provider": "aws",
+  "resource_types": ["rds::instance"],
+
+  "permissions_required": [
+    "rds:CreateDBSnapshot",
+    "rds:DescribeDBSnapshots"
+  ],
+
+  "estimated_duration_seconds": 300,
+  "timeout_seconds": 600,
+
+  "created_at": 1726329600,
+  "updated_at": 1728391162
+}
+```
+
+#### Multi-Implementation Code Structure
+
+Each script can have multiple implementations (bash, python, node, terraform, cloudformation):
+
+```
+scripts/create-rds-snapshot/v2.1.0/
+├── metadata.json
+├── parameters.json
+└── code/
+    ├── bash/
+    │   ├── script.sh
+    │   └── README.md
+    ├── python/
+    │   ├── main.py
+    │   ├── requirements.txt
+    │   └── README.md
+    ├── node/
+    │   ├── index.js
+    │   ├── package.json
+    │   └── README.md
+    ├── terraform/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   ├── outputs.tf
+    │   └── README.md
+    └── cloudformation/
+        ├── template.yaml
+        └── README.md
+```
+
+#### Implementation Details by Type
+
+**Bash Implementation**:
+```bash
+#!/bin/bash
+set -e
+
+# create-rds-snapshot v2.1.0
+# Creates a manual snapshot of an RDS instance
+
+INSTANCE_ID="$1"
+SNAPSHOT_NAME="$2"
+REGION="$3"
+
+# Create snapshot
+aws rds create-db-snapshot \
+  --db-instance-identifier "$INSTANCE_ID" \
+  --db-snapshot-identifier "$SNAPSHOT_NAME" \
+  --region "$REGION"
+
+# Wait for snapshot to complete
+aws rds wait db-snapshot-available \
+  --db-snapshot-identifier "$SNAPSHOT_NAME" \
+  --region "$REGION"
+
+# Get snapshot details
+SNAPSHOT_ARN=$(aws rds describe-db-snapshots \
+  --db-snapshot-identifier "$SNAPSHOT_NAME" \
+  --region "$REGION" \
+  --query 'DBSnapshots[0].DBSnapshotArn' \
+  --output text)
+
+# Output (JSON format for step outputs)
+echo "{\"snapshot_id\": \"$SNAPSHOT_NAME\", \"snapshot_arn\": \"$SNAPSHOT_ARN\"}"
+```
+
+**Python Implementation**:
+```python
+#!/usr/bin/env python3
+import boto3
+import json
+import sys
+import time
+
+def create_rds_snapshot(instance_id: str, snapshot_name: str, region: str):
+    """Create RDS snapshot and wait for completion"""
+
+    rds = boto3.client('rds', region_name=region)
+
+    # Create snapshot
+    response = rds.create_db_snapshot(
+        DBInstanceIdentifier=instance_id,
+        DBSnapshotIdentifier=snapshot_name
+    )
+
+    # Wait for snapshot to be available
+    waiter = rds.get_waiter('db_snapshot_available')
+    waiter.wait(DBSnapshotIdentifier=snapshot_name)
+
+    # Get snapshot details
+    snapshot = rds.describe_db_snapshots(
+        DBSnapshotIdentifier=snapshot_name
+    )['DBSnapshots'][0]
+
+    # Return outputs as JSON
+    outputs = {
+        "snapshot_id": snapshot['DBSnapshotIdentifier'],
+        "snapshot_arn": snapshot['DBSnapshotArn']
+    }
+
+    print(json.dumps(outputs))
+    return outputs
+
+if __name__ == "__main__":
+    instance_id = sys.argv[1]
+    snapshot_name = sys.argv[2]
+    region = sys.argv[3]
+
+    create_rds_snapshot(instance_id, snapshot_name, region)
+```
+
+**Node.js Implementation**:
+```javascript
+const AWS = require('aws-sdk');
+
+async function createRdsSnapshot(instanceId, snapshotName, region) {
+  const rds = new AWS.RDS({ region });
+
+  // Create snapshot
+  await rds.createDBSnapshot({
+    DBInstanceIdentifier: instanceId,
+    DBSnapshotIdentifier: snapshotName
+  }).promise();
+
+  // Wait for snapshot to be available
+  await rds.waitFor('dbSnapshotAvailable', {
+    DBSnapshotIdentifier: snapshotName
+  }).promise();
+
+  // Get snapshot details
+  const { DBSnapshots } = await rds.describeDBSnapshots({
+    DBSnapshotIdentifier: snapshotName
+  }).promise();
+
+  const snapshot = DBSnapshots[0];
+
+  // Return outputs as JSON
+  const outputs = {
+    snapshot_id: snapshot.DBSnapshotIdentifier,
+    snapshot_arn: snapshot.DBSnapshotArn
+  };
+
+  console.log(JSON.stringify(outputs));
+  return outputs;
+}
+
+// Main
+const [instanceId, snapshotName, region] = process.argv.slice(2);
+createRdsSnapshot(instanceId, snapshotName, region)
+  .catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+```
+
+**Terraform Implementation**:
+```hcl
+# main.tf
+variable "instance_id" {
+  type = string
+}
+
+variable "snapshot_name" {
+  type = string
+}
+
+variable "region" {
+  type = string
+}
+
+provider "aws" {
+  region = var.region
+}
+
+resource "aws_db_snapshot" "manual" {
+  db_instance_identifier = var.instance_id
+  db_snapshot_identifier = var.snapshot_name
+}
+
+output "snapshot_id" {
+  value = aws_db_snapshot.manual.id
+}
+
+output "snapshot_arn" {
+  value = aws_db_snapshot.manual.db_snapshot_arn
+}
+```
+
+**CloudFormation Implementation**:
+```yaml
+# template.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create RDS Snapshot
+
+Parameters:
+  InstanceId:
+    Type: String
+  SnapshotName:
+    Type: String
+  Region:
+    Type: String
+
+Resources:
+  RDSSnapshot:
+    Type: AWS::RDS::DBSnapshot
+    Properties:
+      DBInstanceIdentifier: !Ref InstanceId
+      DBSnapshotIdentifier: !Ref SnapshotName
+
+Outputs:
+  SnapshotId:
+    Value: !Ref RDSSnapshot
+  SnapshotArn:
+    Value: !GetAtt RDSSnapshot.DBSnapshotArn
+```
+
+#### Benefits of Multi-Implementation
+
+| Benefit | Description |
+|---------|-------------|
+| **User Choice** | DevOps teams can use their preferred language/tool |
+| **Flexibility** | Same logic available in multiple formats |
+| **Gradual Migration** | Add new implementations without breaking existing playbooks |
+| **Optimization** | Use bash for simple tasks, Python for complex logic |
+| **Tool-Specific Features** | Terraform for IaC, CloudFormation for AWS-native |
+
+#### Script Storage on Disk
+
+**Local (Client)**:
+```
+~/.escher/scripts/
+├── create-rds-snapshot/
+│   ├── v1.0.0/
+│   └── v2.1.0/
+│       ├── metadata.json
+│       └── code/
+│           ├── bash/script.sh
+│           ├── python/main.py
+│           └── node/index.js
+├── stop-rds-instance/
+└── verify-backup/
+```
+
+**S3 (Server)**:
+```
+s3://escher-library/scripts/
+├── create-rds-snapshot/
+│   └── v2.1.0/
+│       ├── metadata.json
+│       └── code/
+│           ├── bash/script.sh
+│           ├── python/main.py
+│           ├── node/index.js
+│           ├── terraform/main.tf
+│           └── cloudformation/template.yaml
+```
+
+### 5. Explain Plan Structure
 
 ```json
 {
@@ -1188,6 +1859,227 @@ Each playbook can have up to 4 execution formats:
 }
 ```
 
+#### Nested Sub-Steps with Hierarchical Structure (NEW)
+
+**Key Concept**: When a playbook calls another playbook (Pure Orchestration or Hybrid), the explain plan displays nested sub-steps to show the complete hierarchy.
+
+**Example: Parent Playbook Calling Child Playbooks**
+
+Parent playbook `weekend-rds-automation` orchestrates two child playbooks:
+
+```json
+{
+  "explain_plan": {
+    "what_it_does": "Automated weekend RDS cost optimization with backup and shutdown",
+    "what_happens": [
+      {
+        "step": 1,
+        "action": "Create RDS snapshot",
+        "type": "playbook",
+        "playbook_ref": {
+          "playbook_id": "create-rds-snapshot",
+          "version": "1.0.0"
+        },
+        "duration_seconds": 35,
+        "sub_steps": [
+          {
+            "step": "1.1",
+            "action": "Verify RDS instance exists",
+            "type": "script",
+            "script_id": "check-rds-state",
+            "duration_seconds": 5,
+            "blocking": true
+          },
+          {
+            "step": "1.2",
+            "action": "Create manual snapshot",
+            "type": "script",
+            "script_id": "create-snapshot",
+            "duration_seconds": 25,
+            "blocking": true
+          },
+          {
+            "step": "1.3",
+            "action": "Verify snapshot completion",
+            "type": "script",
+            "script_id": "verify-snapshot",
+            "duration_seconds": 5,
+            "blocking": true
+          }
+        ],
+        "can_fail": true,
+        "rollback": "Delete incomplete snapshot"
+      },
+      {
+        "step": 2,
+        "action": "Stop RDS instance",
+        "type": "playbook",
+        "playbook_ref": {
+          "playbook_id": "stop-rds-instance",
+          "version": "2.0.0"
+        },
+        "duration_seconds": 130,
+        "sub_steps": [
+          {
+            "step": "2.1",
+            "action": "Check for active connections",
+            "type": "script",
+            "script_id": "check-connections",
+            "duration_seconds": 10,
+            "blocking": true
+          },
+          {
+            "step": "2.2",
+            "action": "Issue stop command",
+            "type": "script",
+            "script_id": "stop-instance",
+            "duration_seconds": 5,
+            "blocking": true
+          },
+          {
+            "step": "2.3",
+            "action": "Wait for stopped state",
+            "type": "script",
+            "script_id": "wait-stopped",
+            "duration_seconds": 115,
+            "blocking": true
+          }
+        ],
+        "can_fail": true,
+        "rollback": "Restart instance if needed"
+      },
+      {
+        "step": 3,
+        "action": "Send notification",
+        "type": "script",
+        "script_id": "send-sns-notification",
+        "duration_seconds": 2,
+        "can_fail": false,
+        "rollback": null
+      }
+    ]
+  }
+}
+```
+
+**UI Display Example**:
+
+```
+Weekend RDS Automation
+├─ Step 1: Create RDS snapshot (35s)
+│  ├─ 1.1: Verify RDS instance exists (5s) ✓ BLOCKING
+│  ├─ 1.2: Create manual snapshot (25s) ✓ BLOCKING
+│  └─ 1.3: Verify snapshot completion (5s) ✓ BLOCKING
+│
+├─ Step 2: Stop RDS instance (130s)
+│  ├─ 2.1: Check for active connections (10s) ✓ BLOCKING
+│  ├─ 2.2: Issue stop command (5s) ✓ BLOCKING
+│  └─ 2.3: Wait for stopped state (115s) ✓ BLOCKING
+│
+└─ Step 3: Send notification (2s)
+
+Total Duration: ~167 seconds
+```
+
+**Blocking Behavior**:
+
+All sub-steps are **blocking** by default, meaning:
+- Sub-step 1.1 must complete before 1.2 starts
+- Sub-step 1.2 must complete before 1.3 starts
+- All sub-steps (1.1, 1.2, 1.3) must complete before Step 2 starts
+
+**Failure Handling with Sub-Steps**:
+
+```json
+{
+  "step": 1,
+  "action": "Create RDS snapshot",
+  "sub_steps": [
+    {
+      "step": "1.1",
+      "action": "Verify RDS instance exists",
+      "can_fail": true,
+      "on_failure": "abort_parent"
+    },
+    {
+      "step": "1.2",
+      "action": "Create manual snapshot",
+      "can_fail": true,
+      "on_failure": "rollback_and_abort"
+    },
+    {
+      "step": "1.3",
+      "action": "Verify snapshot completion",
+      "can_fail": false
+    }
+  ]
+}
+```
+
+**on_failure Options**:
+- `abort_parent`: Stop entire parent step (Step 1) and propagate failure
+- `rollback_and_abort`: Run rollback logic, then abort parent
+- `continue`: Log error but continue to next sub-step (rare)
+
+**Deep Nesting (3 Levels)**:
+
+Playbooks can nest up to 3 levels deep:
+
+```
+Parent Playbook (Level 1)
+├─ Step 1: High-level workflow (Level 2 - calls another playbook)
+│  ├─ 1.1: Mid-level task (Level 3 - calls scripts)
+│  │  ├─ 1.1.1: Script execution
+│  │  └─ 1.1.2: Script execution
+│  └─ 1.2: Mid-level task
+│     └─ 1.2.1: Script execution
+└─ Step 2: Direct script call
+```
+
+**Example Use Case**: Disaster Recovery Playbook
+
+```
+DR: Restore Production RDS
+├─ Step 1: Validate backup availability (playbook)
+│  ├─ 1.1: Find latest snapshot (script)
+│  ├─ 1.2: Verify snapshot integrity (script)
+│  └─ 1.3: Check restore prerequisites (script)
+│
+├─ Step 2: Restore database (playbook)
+│  ├─ 2.1: Create new RDS instance (script)
+│  ├─ 2.2: Wait for instance ready (script)
+│  ├─ 2.3: Restore from snapshot (script)
+│  └─ 2.4: Verify restore completion (script)
+│
+├─ Step 3: Update DNS records (playbook)
+│  ├─ 3.1: Update Route53 entry (script)
+│  └─ 3.2: Verify DNS propagation (script)
+│
+└─ Step 4: Run smoke tests (script)
+```
+
+**Generation Process**:
+
+1. **At Publish Time** (Server):
+   - Playbook Agent recursively resolves all playbook_refs
+   - Expands sub-steps from nested playbooks
+   - Flattens to 3-level hierarchy
+   - Stores in explain_plan.json
+
+2. **At Search Time** (Server):
+   - Returns explain_plan with all sub-steps pre-populated
+   - Client displays hierarchical tree view
+
+3. **At Execution Time** (Client):
+   - Execution Engine follows step order: 1 → 1.1 → 1.2 → 1.3 → 2 → 2.1...
+   - Updates UI with real-time progress: ✓ 1.1 Done → ⏳ 1.2 Running → ...
+
+**Benefits**:
+- **Transparency**: User sees complete workflow before execution
+- **Predictability**: Know exact duration and order
+- **Debugging**: Pinpoint failures to specific sub-steps
+- **Trust**: Understand what each nested playbook does
+
 ### 5. Complete Playbook Structure on Disk
 
 ```
@@ -1211,8 +2103,543 @@ Each playbook can have up to 4 execution formats:
     ├── metadata.json
     ├── parameters.json
     ├── explain_plan.json
-    └── ... (same structure)
+    └��─ ... (same structure)
 ```
+
+---
+
+## Auto-Remediation Flow (NEW)
+
+**Key Concept**: When a step fails during playbook execution, the system can automatically attempt to fix the issue and retry the failed step.
+
+### How Auto-Remediation Works
+
+```
+Playbook Execution
+    ↓
+Step 2 Fails (e.g., "Create RDS snapshot")
+    ↓
+┌────────────────────────────────────────────────────┐
+│ Execution Engine Detects Failure                   │
+├────────────────────────────────────────────────────┤
+│ Error: "InsufficientStorageException:              │
+│  Not enough disk space to create snapshot"         │
+└────────────────────────────────────────────────────┘
+    ↓
+┌────────────────────────────────────────────────────┐
+│ Auto-Remediation Agent (LLM-Powered)               │
+├────────────────────────────────────────────────────┤
+│ 1. Analyze error message                           │
+│ 2. Check playbook context                          │
+│ 3. Determine if auto-fixable                       │
+│ 4. Generate remediation plan                       │
+└────────────────────────────────────────────────────┘
+    ↓
+LLM Determines: "Fixable - Need to free disk space"
+    ↓
+┌────────────────────────────────────────────────────┐
+│ Remediation Steps                                   │
+├────────────────────────────────────────────────────┤
+│ 1. Delete old snapshots (retention policy)         │
+│ 2. Wait 30 seconds for space reclamation           │
+│ 3. Retry Step 2                                    │
+└────────────────────────────────────────────────────┘
+    ↓
+Step 2 Retried → Success ✓
+    ↓
+Continue to Step 3
+```
+
+### Remediation Configuration in orchestration.json
+
+```json
+{
+  "steps": [
+    {
+      "step_number": 2,
+      "name": "Create RDS snapshot",
+      "type": "script",
+      "script_ref": {
+        "script_id": "create-rds-snapshot",
+        "version": "2.1.0",
+        "implementation": "python"
+      },
+      "auto_remediation": {
+        "enabled": true,
+        "max_attempts": 3,
+        "retry_delay_seconds": 30,
+        "remediation_strategies": [
+          {
+            "error_pattern": "InsufficientStorageException",
+            "action": "cleanup_old_snapshots",
+            "parameters": {
+              "retention_days": 7
+            }
+          },
+          {
+            "error_pattern": "SnapshotQuotaExceededException",
+            "action": "delete_oldest_snapshot",
+            "parameters": {
+              "count": 1
+            }
+          },
+          {
+            "error_pattern": "ThrottlingException",
+            "action": "exponential_backoff",
+            "parameters": {
+              "initial_delay": 5,
+              "max_delay": 60
+            }
+          }
+        ],
+        "fallback": "notify_user"
+      },
+      "parameter_mapping": {
+        "instance_id": "${playbook.instance_id}",
+        "snapshot_name": "${playbook.snapshot_name}"
+      }
+    }
+  ]
+}
+```
+
+### Auto-Remediation Process
+
+**1. Error Detection**:
+```rust
+match step_result {
+    Err(error) => {
+        if step.auto_remediation.enabled {
+            attempt_auto_remediation(step, error).await?;
+        } else {
+            return Err(error); // Fail immediately
+        }
+    }
+    Ok(output) => continue_to_next_step(output),
+}
+```
+
+**2. LLM Analysis** (Optional - for unknown errors):
+```
+LLM Prompt:
+"Analyze this error and suggest remediation if possible:
+
+Error: InsufficientStorageException - Not enough disk space to create snapshot
+Context: Creating RDS snapshot for instance prod-db-1
+Step: create-rds-snapshot (step 2 of 5)
+
+Can this be automatically fixed? If yes, provide:
+1. Remediation action
+2. Expected success rate
+3. Risk level (low/medium/high)
+
+Return JSON."
+```
+
+**LLM Response**:
+```json
+{
+  "auto_fixable": true,
+  "remediation_action": "cleanup_old_snapshots",
+  "parameters": {
+    "retention_days": 7,
+    "delete_count": 3
+  },
+  "success_probability": 0.85,
+  "risk_level": "low",
+  "explanation": "Delete snapshots older than 7 days to free space. Low risk since snapshots are redundant backups."
+}
+```
+
+**3. Execute Remediation**:
+```rust
+async fn execute_remediation(action: &str, params: &Value) -> Result<()> {
+    match action {
+        "cleanup_old_snapshots" => {
+            let retention_days = params["retention_days"].as_i64().unwrap();
+            delete_old_snapshots(retention_days).await?;
+            tokio::time::sleep(Duration::from_secs(30)).await; // Wait for cleanup
+            Ok(())
+        },
+        "delete_oldest_snapshot" => {
+            let count = params["count"].as_i64().unwrap();
+            delete_oldest_snapshots(count).await?;
+            Ok(())
+        },
+        "exponential_backoff" => {
+            let initial_delay = params["initial_delay"].as_i64().unwrap();
+            tokio::time::sleep(Duration::from_secs(initial_delay)).await;
+            Ok(())
+        },
+        _ => Err(Error::UnknownRemediation(action.to_string())),
+    }
+}
+```
+
+**4. Retry Failed Step**:
+```rust
+for attempt in 1..=max_attempts {
+    match execute_step(step).await {
+        Ok(output) => return Ok(output), // Success!
+        Err(error) => {
+            if attempt < max_attempts {
+                // Try remediation
+                if let Some(remediation) = find_remediation(&error, &step) {
+                    execute_remediation(&remediation.action, &remediation.params).await?;
+                    continue; // Retry
+                }
+            }
+            return Err(error); // Give up
+        }
+    }
+}
+```
+
+### Common Remediation Strategies
+
+| Error Type | Remediation Action | Success Rate |
+|------------|-------------------|--------------|
+| `InsufficientStorageException` | Delete old snapshots | 85% |
+| `SnapshotQuotaExceededException` | Delete oldest snapshot | 90% |
+| `ThrottlingException` | Exponential backoff | 95% |
+| `InvalidParameterException` | LLM suggests parameter fix | 60% |
+| `ResourceNotFoundException` | Create missing resource | 70% |
+| `AccessDeniedException` | Notify user (not auto-fixable) | 0% |
+
+### UI Display During Remediation
+
+```
+Weekend RDS Automation
+├─ Step 1: Create RDS snapshot ✓ (35s)
+├─ Step 2: Stop RDS instance ⚠️ FAILED → REMEDIATING
+│  └─ Error: InsufficientStorageException
+│  └─ Remediation: Deleting old snapshots (retention: 7 days)
+│  └─ Deleted 3 old snapshots (freed 15 GB)
+│  └─ Retrying step 2... ⏳
+│  └─ Retry successful! ✓
+└─ Step 3: Send notification ⏳ (waiting...)
+```
+
+### Remediation Logs
+
+All remediation attempts are logged for auditing:
+
+```json
+{
+  "execution_id": "exec-abc123",
+  "playbook_id": "weekend-rds-automation",
+  "version": "1.5.0",
+  "step_number": 2,
+  "remediation_log": [
+    {
+      "attempt": 1,
+      "timestamp": "2025-10-16T10:15:30Z",
+      "error": "InsufficientStorageException: Not enough disk space",
+      "remediation_action": "cleanup_old_snapshots",
+      "remediation_params": {
+        "retention_days": 7,
+        "deleted_count": 3,
+        "space_freed_gb": 15
+      },
+      "remediation_duration_seconds": 45,
+      "retry_result": "success"
+    }
+  ],
+  "final_status": "success",
+  "total_attempts": 2
+}
+```
+
+### Benefits
+
+- **Reliability**: 70-90% of transient failures auto-fixed
+- **User Experience**: No manual intervention required
+- **Transparency**: Full audit trail of remediation attempts
+- **Intelligence**: LLM can handle novel errors
+- **Safety**: Max attempts limit prevents infinite loops
+
+---
+
+## Resume Capability (NEW)
+
+**Key Concept**: If a playbook execution fails mid-way, users can resume from the last successful step instead of starting over.
+
+### How Resume Works
+
+```
+Playbook Execution Started
+├─ Step 1: Create RDS snapshot ✓ (completed)
+├─ Step 2: Verify backup integrity ✓ (completed)
+├─ Step 3: Stop RDS instance ❌ (failed)
+└─ Step 4: Send notification ⏸️ (not started)
+
+┌────────────────────────────────────────────────────┐
+│ Execution State Saved                               │
+├────────────────────────────────────────────────────┤
+│ - Last successful step: 2                           │
+│ - Step outputs: {                                   │
+│     step1: {snapshot_id: "snap-123"},              │
+│     step2: {verification_status: "passed"}         │
+│   }                                                 │
+│ - Failed step: 3                                    │
+│ - Error: "ActiveConnectionsException"              │
+└────────────────────────────────────────────────────┘
+
+User Reviews Error → Fixes Issue (closes connections)
+
+User Clicks "Resume Playbook"
+    ↓
+┌────────────────────────────────────────────────────┐
+│ Resume from Step 3                                  │
+├────────────────────────────────────────────────────┤
+│ - Skip steps 1 & 2 (already completed)             │
+│ - Load outputs from steps 1 & 2                    │
+│ - Retry step 3 with saved parameters               │
+│ - Continue to step 4 if successful                 │
+└────────────────────────────────────────────────────┘
+    ↓
+├─ Step 3: Stop RDS instance ✓ (retried & succeeded)
+└─ Step 4: Send notification ✓ (completed)
+
+Playbook Completed Successfully!
+```
+
+### Execution State Storage
+
+**State File Format** (`~/.escher/execution-state/{execution_id}.json`):
+
+```json
+{
+  "execution_id": "exec-abc123",
+  "playbook_id": "weekend-rds-automation",
+  "version": "1.5.0",
+  "tenant_id": "abc123",
+  "user_id": "user@example.com",
+
+  "started_at": "2025-10-16T10:00:00Z",
+  "paused_at": "2025-10-16T10:05:30Z",
+  "status": "paused",
+
+  "parameters": {
+    "instance_id": "prod-db-1",
+    "snapshot_name": "weekend-backup-20251016",
+    "region": "us-east-1"
+  },
+
+  "completed_steps": [
+    {
+      "step_number": 1,
+      "name": "Create RDS snapshot",
+      "status": "completed",
+      "started_at": "2025-10-16T10:00:00Z",
+      "completed_at": "2025-10-16T10:00:35Z",
+      "duration_seconds": 35,
+      "output": {
+        "snapshot_id": "snap-abc123",
+        "snapshot_arn": "arn:aws:rds:us-east-1:123456789:snapshot:snap-abc123"
+      }
+    },
+    {
+      "step_number": 2,
+      "name": "Verify backup integrity",
+      "status": "completed",
+      "started_at": "2025-10-16T10:00:35Z",
+      "completed_at": "2025-10-16T10:05:25Z",
+      "duration_seconds": 290,
+      "output": {
+        "verification_status": "passed",
+        "integrity_score": 1.0
+      }
+    }
+  ],
+
+  "failed_step": {
+    "step_number": 3,
+    "name": "Stop RDS instance",
+    "status": "failed",
+    "started_at": "2025-10-16T10:05:25Z",
+    "failed_at": "2025-10-16T10:05:30Z",
+    "duration_seconds": 5,
+    "error": {
+      "type": "ActiveConnectionsException",
+      "message": "Cannot stop instance with 5 active connections",
+      "code": "RDS-1003"
+    },
+    "retry_count": 0
+  },
+
+  "pending_steps": [4],
+
+  "resume_from_step": 3,
+  "resumable": true
+}
+```
+
+### Resume API
+
+**Client-Side API**:
+
+```rust
+// Check if execution can be resumed
+pub async fn can_resume(execution_id: &str) -> Result<bool> {
+    let state = load_execution_state(execution_id).await?;
+    Ok(state.status == "paused" && state.resumable)
+}
+
+// Resume execution
+pub async fn resume_execution(execution_id: &str) -> Result<ExecutionResult> {
+    // Load saved state
+    let mut state = load_execution_state(execution_id).await?;
+
+    // Load playbook
+    let playbook = load_playbook(&state.playbook_id, &state.version).await?;
+
+    // Skip completed steps, start from failed/next step
+    let start_from = state.resume_from_step;
+
+    // Execute remaining steps
+    for step_num in start_from..=playbook.steps.len() {
+        let step = &playbook.steps[step_num - 1];
+
+        // Use outputs from previous steps
+        let context = build_execution_context(&state.completed_steps);
+
+        match execute_step(step, &context).await {
+            Ok(output) => {
+                // Save progress
+                state.completed_steps.push(StepResult {
+                    step_number: step_num,
+                    status: "completed",
+                    output,
+                    ..Default::default()
+                });
+                save_execution_state(&state).await?;
+            },
+            Err(error) => {
+                // Save failure and pause
+                state.failed_step = Some(StepResult {
+                    step_number: step_num,
+                    status: "failed",
+                    error: Some(error.clone()),
+                    ..Default::default()
+                });
+                state.status = "paused";
+                save_execution_state(&state).await?;
+                return Err(error);
+            }
+        }
+    }
+
+    // All steps completed
+    state.status = "completed";
+    state.completed_at = Some(SystemTime::now());
+    save_execution_state(&state).await?;
+
+    Ok(ExecutionResult::Success)
+}
+```
+
+### UI for Resume
+
+**Execution History View**:
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Paused Executions                                   │
+├─────────────────────────────────────────────────────┤
+│ 🔶 Weekend RDS Automation v1.5.0                    │
+│    Started: 2025-10-16 10:00 AM                     │
+│    Paused:  2025-10-16 10:05 AM (5 minutes ago)     │
+│    Status:  Failed at Step 3                        │
+│    Error:   ActiveConnectionsException              │
+│                                                      │
+│    Progress: ▓▓▓▓▓▓░░░░ 2/4 steps (50%)             │
+│                                                      │
+│    [Resume] [View Details] [Delete]                 │
+├─────────────────────────────────────────────────────┤
+│ 🔶 Backup Production Databases v2.0.0               │
+│    Started: 2025-10-15 11:30 PM                     │
+│    Paused:  2025-10-15 11:45 PM (12 hours ago)      │
+│    Status:  Failed at Step 5                        │
+│                                                      │
+│    [Resume] [View Details] [Delete]                 │
+└─────────────────────────────────────────────────────┘
+```
+
+**Resume Confirmation Dialog**:
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Resume Playbook Execution?                          │
+├─────────────────────────────────────────────────────┤
+│                                                      │
+│ Playbook: Weekend RDS Automation v1.5.0             │
+│ Execution ID: exec-abc123                           │
+│                                                      │
+│ Completed Steps:                                    │
+│ ✓ Step 1: Create RDS snapshot                       │
+│ ✓ Step 2: Verify backup integrity                   │
+│                                                      │
+│ Will Resume From:                                   │
+│ ↻ Step 3: Stop RDS instance                         │
+│                                                      │
+│ Remaining Steps:                                    │
+│ ⏸️ Step 4: Send notification                         │
+│                                                      │
+│ Previous Error:                                     │
+│ ActiveConnectionsException: Cannot stop instance    │
+│ with 5 active connections                           │
+│                                                      │
+│ ⚠️ Make sure the issue has been resolved before     │
+│    resuming.                                        │
+│                                                      │
+│          [Cancel]  [Resume Execution]               │
+└─────────────────────────────────────────────────────┘
+```
+
+### Resume Limitations
+
+**Cannot Resume If**:
+- Playbook has been modified (version changed)
+- Completed steps have expired state (> 24 hours)
+- External resources changed (e.g., snapshot deleted)
+- Step dependencies broken
+
+**Validation Before Resume**:
+
+```rust
+pub fn validate_resume_state(state: &ExecutionState) -> Result<()> {
+    // Check state age
+    let state_age = SystemTime::now()
+        .duration_since(state.paused_at)?
+        .as_secs();
+    if state_age > 86400 {  // 24 hours
+        return Err(Error::StateExpired);
+    }
+
+    // Check playbook version still exists
+    let playbook = load_playbook(&state.playbook_id, &state.version).await?;
+
+    // Verify outputs from completed steps are still valid
+    for step in &state.completed_steps {
+        if let Some(snapshot_id) = step.output.get("snapshot_id") {
+            if !verify_snapshot_exists(snapshot_id).await? {
+                return Err(Error::ResourceNoLongerExists);
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+
+### Benefits
+
+- **Time Saving**: Don't repeat long-running steps
+- **Cost Saving**: Avoid redundant cloud operations
+- **Debugging**: Fix issues and continue
+- **Flexibility**: Pause and resume later
+- **Recovery**: Handle transient failures gracefully
 
 ---
 
@@ -1391,38 +2818,74 @@ Playbooks are stored in S3 with a well-organized structure for easy access and m
 
 ```
 s3://escher-library/
-├── playbooks/
-│   ├── aws-rds-stop/
+├── scripts/                        # ← NEW: Reusable script library
+│   ├── create-rds-snapshot/
+│   │   ├── v1.0.0/
+│   │   │   ├── metadata.json
+│   │   │   └── code/
+│   │   │       ├── bash/
+│   │   │       │   ├── script.sh
+│   │   │       │   └── README.md
+│   │   │       ├── python/
+│   │   │       │   ├── main.py
+│   │   │       │   ├── requirements.txt
+│   │   │       │   └── README.md
+│   │   │       ├── node/
+│   │   │       │   ├── index.js
+│   │   │       │   ├── package.json
+│   │   │       │   └── README.md
+│   │   │       ├── terraform/
+│   │   │       │   ├── main.tf
+│   │   │       │   ├── variables.tf
+│   │   │       │   ├── outputs.tf
+│   │   │       │   └── README.md
+│   │   │       └── cloudformation/
+│   │   │           ├── template.yaml
+│   │   │           └── README.md
+│   │   ├── v1.1.0/
+│   │   └── v2.1.0/
+│   │
+│   ├── stop-rds-instance/
+│   │   ├── v1.0.0/
+│   │   └── v2.0.0/
+│   │       ├── metadata.json
+│   │       └── code/
+│   │           ├── bash/script.sh
+│   │           ├── python/main.py
+│   │           └── node/index.js
+│   │
+│   ├── check-rds-state/
+│   ├── verify-backup/
+│   ├── start-ec2-instance/
+│   ├── stop-ec2-instance/
+│   └── backup-s3-bucket/
+│
+├── playbooks/                      # ← Orchestration only (references scripts)
+│   ├── stop-rds-with-snapshot/
 │   │   ├── v1.0.0/
 │   │   │   ├── metadata.json
 │   │   │   ├── parameters.json
 │   │   │   ├── explain_plan.json
-│   │   │   ├── shell/
-│   │   │   │   └── stop.sh
-│   │   │   ├── cloudformation/
-│   │   │   │   └── template.yaml
-│   │   │   ├── terraform/
-│   │   │   │   ├── main.tf
-│   │   │   │   ├── variables.tf
-│   │   │   │   └── outputs.tf
-│   │   │   └── python/
-│   │   │       ├── stop_rds.py
-│   │   │       └── requirements.txt
+│   │   │   └── orchestration.json  # References script IDs
 │   │   ├── v1.1.0/
 │   │   └── v1.2.0/
 │   │
-│   ├── aws-rds-start/
+│   ├── weekend-rds-automation/
 │   │   ├── v1.0.0/
-│   │   └── v1.1.0/
+│   │   └── v1.5.0/
 │   │
-│   ├── aws-ec2-stop/
-│   ├── aws-ec2-start/
-│   ├── aws-s3-backup/
-│   ├── azure-vm-stop/
-│   └── gcp-compute-stop/
+│   ├── backup-and-stop-rds/
+│   ├── start-dev-environment/
+│   ├── stop-dev-environment/
+│   ├── scale-ec2-fleet/
+│   └── rotate-rds-snapshots/
 │
 └── checksums/
-    └── aws-rds-stop-v1.2.0.sha256
+    ├── scripts/
+    │   ├── create-rds-snapshot-v2.1.0.sha256
+    │   └── stop-rds-instance-v2.0.0.sha256
+    └── playbooks/
+        └── stop-rds-with-snapshot-v1.2.0.sha256
 ```
 
 **Access**:
@@ -1870,7 +3333,7 @@ aws s3api put-bucket-versioning \
 │                                                              │
 │  Uses: storage-service crate (embedded Qdrant)              │
 │                                                              │
-│  ┌────────────────────────────────────────────────────────┐ │
+│  ┌────────────────────────────────────────────────────────┐ ���
 │  │ Search Engine                                          │ │
 │  │  • Multi-source RAG search                             │ │
 │  │  • Query: escher_library + tenant_{id}_playbooks      │ │
@@ -2007,7 +3470,7 @@ Frontend → Playbook Service (Rust, client-side):
     ↓
 ┌────────────────────────────────────────────────────┐
 │ Playbook Service (Client)                          │
-├────────────────────────────────────────────────────┤
+├──────────────────────────��─────────────────────────┤
 │ 1. Check local storage                             │
 │    path = ~/.escher/playbooks/synced/              │
 │           user-weekend-shutdown/v1.2.0/shell/      │
