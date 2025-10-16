@@ -3654,8 +3654,196 @@ pub fn router() -> Router {
 
 ---
 
+## Best Practices & Quality Validation
+
+The Playbook Agent enforces best practices and validates playbook quality during publish and ranking.
+
+### Validation During Publish
+
+When a user publishes a playbook, the agent validates it against [best practices](playbook-best-practices.md):
+
+```rust
+pub async fn publish_metadata(
+    &self,
+    tenant_id: &str,
+    metadata: &PlaybookMetadata,
+    scripts: &HashMap<String, String>,
+) -> Result<PublishResult> {
+    // Step 1: Validate metadata completeness
+    let metadata_validation = validate_metadata_completeness(metadata)?;
+
+    // Step 2: Validate parameters
+    let param_validation = validate_parameters(&metadata.parameters)?;
+
+    // Step 3: Validate scripts (if embedded)
+    let script_validation = validate_scripts(&metadata.scripts)?;
+
+    // Step 4: Check best practices adherence
+    let best_practices_check = check_best_practices(metadata)?;
+
+    // Step 5: Calculate quality score (0-100)
+    let quality_score = calculate_quality_score(metadata);
+
+    // Step 6: Determine if playbook meets minimum quality threshold
+    if quality_score < 50.0 {
+        return Err(Error::QualityThresholdNotMet {
+            score: quality_score,
+            required: 50.0,
+            issues: best_practices_check.issues,
+        });
+    }
+
+    // Step 7: Publish with quality metadata
+    self.publish_with_quality_score(
+        tenant_id,
+        metadata,
+        scripts,
+        quality_score,
+        best_practices_check,
+    ).await
+}
+```
+
+### Quality Scoring Algorithm
+
+The agent calculates a quality score based on multiple factors:
+
+```rust
+fn calculate_quality_score(metadata: &PlaybookMetadata) -> f32 {
+    let mut score = 0.0;
+
+    // Metadata completeness (30 points)
+    // - Name, description length and clarity
+    // - Keywords (5+ required for full points)
+    // - Use cases (2+ required)
+    // - Prerequisites documented
+    score += score_metadata_completeness(metadata) * 30.0;
+
+    // Documentation quality (25 points)
+    // - Explain plan completeness
+    // - Risk documentation
+    // - Rollback strategy
+    // - Success criteria
+    score += score_documentation_quality(metadata) * 25.0;
+
+    // Parameter design (20 points)
+    // - Clear names and descriptions
+    // - Validation rules
+    // - Auto-fill strategies
+    // - Safe defaults
+    score += score_parameter_design(metadata) * 20.0;
+
+    // Error handling (15 points)
+    // - Pre-flight checks
+    // - Rollback strategy
+    // - Auto-remediation config
+    score += score_error_handling(metadata) * 15.0;
+
+    // Testing coverage (10 points)
+    // - Test plan documented
+    // - Dry run mode available
+    score += score_testing_coverage(metadata) * 10.0;
+
+    score.min(100.0)
+}
+```
+
+### Quality Score Impact
+
+Quality scores affect playbook ranking and user experience:
+
+| Score Range | Impact | User Experience |
+|-------------|--------|-----------------|
+| **90-100** | Featured | ⭐ Featured in search results, +20 ranking bonus, "High Quality" badge |
+| **70-89** | Normal | Standard ranking, no special indicators |
+| **50-69** | Warning | Lower ranking, ⚠️ "Needs Improvement" warning shown |
+| **< 50** | Rejected | Cannot publish, must fix issues first |
+
+### Publish Response with Quality Feedback
+
+```json
+{
+  "status": "published",
+  "playbook_id": "user-weekend-shutdown",
+  "version": "1.2.0",
+  "quality_score": 87,
+  "quality_tier": "normal",
+  "feedback": {
+    "strengths": [
+      "Excellent error handling with rollback strategy",
+      "Comprehensive explain plan with clear risks and mitigations",
+      "Good parameter validation with auto-fill strategies",
+      "Idempotent design - safe to retry",
+      "Clear documentation and examples"
+    ],
+    "improvements": [
+      "Add 4 more keywords for better searchability (currently 6, recommended 10+)",
+      "Include detailed cost savings calculation in estimated_impact",
+      "Add test coverage documentation in explain plan"
+    ],
+    "warnings": [],
+    "required_fixes": []
+  },
+  "best_practices_adherence": {
+    "idempotency": true,
+    "error_handling": true,
+    "documentation": true,
+    "security": true,
+    "testing": false,
+    "performance": true
+  }
+}
+```
+
+### Quality in LLM Ranking
+
+During ranking (STEP 2), the LLM considers quality scores:
+
+```
+LLM Prompt:
+"Evaluate these playbooks for the user's need:
+
+Playbook 1: user-weekend-shutdown v1.2.0
+- Quality Score: 87/100 (Normal)
+- Best Practices: ✅ Idempotent, ✅ Error handling, ✅ Clear docs
+- Strengths: Comprehensive explain plan, good parameter design
+- Areas for improvement: More keywords needed, test coverage docs
+
+Playbook 2: user-old-shutdown v1.0.0
+- Quality Score: 62/100 (Needs Improvement)
+- Best Practices: ⚠️ No error handling, ⚠️ Minimal documentation
+- Strengths: Simple and straightforward
+- Areas for improvement: Add error handling, improve documentation, add rollback
+
+Playbook 3: escher-aws-rds-stop v1.2.0
+- Quality Score: 98/100 (High Quality - Featured)
+- Best Practices: ✅ All best practices followed
+- Strengths: Battle-tested (1547 executions, 98% success), excellent docs
+- Featured playbook from Escher library
+
+RANKING RULES:
+- Consider quality scores as a factor (but not the only factor)
+- Higher quality indicates better maintenance and reliability
+- Explain quality differences in reasoning
+- USER_CUSTOM still takes precedence if quality is acceptable (>50)"
+```
+
+### Validation Rules
+
+See [Playbook Best Practices - Validation Rules](playbook-best-practices.md#validation-rules) for detailed validation rules enforced by the agent.
+
+Key validations include:
+- **Metadata**: Required fields, format, length constraints
+- **Parameters**: Naming conventions, validation rules, auto-fill strategies
+- **Scripts**: Error handling, idempotency, output format
+- **Documentation**: Explain plan completeness, risk documentation, rollback strategy
+- **Security**: No hardcoded credentials, input sanitization, permissions documented
+
+---
+
 ## Related Documentation
 
+- **[Playbook Best Practices](playbook-best-practices.md)** - Complete guide for writing high-quality playbooks
 - [Playbook Service (Client)](../../04-services/playbook-service/README.md) - Client-side playbook management
 - [Storage Service](../../04-services/storage-service/README.md) - RAG module used by agent
 - [Storage Service Collections](../../04-services/storage-service/collections.md) - user_playbooks schema
