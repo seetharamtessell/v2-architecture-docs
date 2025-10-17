@@ -424,7 +424,7 @@ Before implementing, ensure you have:
 A playbook consists of:
 1. **metadata.json** - Core metadata and configuration
 2. **orchestration.json** - Step definitions with script/playbook references (NEW)
-3. **parameters.json** - Input parameters with auto-fill strategies
+3. **parameters.json** - Input parameters with extraction hints for Master Agent
 4. **explain_plan.json** - Human-readable explanation with nested sub-steps
 
 ### 1. Metadata.json Structure
@@ -511,7 +511,7 @@ A playbook consists of:
         "min_length": 1,
         "max_length": 63
       },
-      "auto_fill_strategy": {
+      "extraction_hint": {
         "source": "user_estate",
         "estate_query": {
           "resource_type": "rds::instance",
@@ -531,7 +531,7 @@ A playbook consists of:
       "prompt": "What would you like to name the snapshot? (leave blank for auto-generated name)",
       "required": false,
       "default": "auto-snapshot-{timestamp}",
-      "auto_fill_strategy": {
+      "extraction_hint": {
         "source": "generated",
         "template": "weekend-shutdown-{instance_id}-{timestamp}"
       }
@@ -553,7 +553,7 @@ A playbook consists of:
       "description": "AWS region",
       "prompt": "Which AWS region is the instance in?",
       "required": true,
-      "auto_fill_strategy": {
+      "extraction_hint": {
         "source": "context",
         "context_field": "resource.region"
       }
@@ -570,515 +570,46 @@ A playbook consists of:
 }
 ```
 
-#### Auto-Fill Strategy Types
+### 2. Parameters Structure
 
-| Source | Description | Example |
-|--------|-------------|---------|
-| `user_estate` | Query user's cloud resources | Find RDS instances matching filters |
-| `context` | Extract from execution context | Get region from selected resource |
-| `generated` | Generate using template | Create timestamp-based names |
-| `static` | Use fixed value | Default region "us-west-2" |
-| `prompt` | Ask user (no auto-fill) | Custom notes or confirmation |
+Parameters define what inputs the playbook needs. The `extraction_hint` field helps the **Master Agent** know where to look for values.
 
-### 2.5 Parameter Resolution & Script Filling Process
-
-This section explains the **end-to-end flow** of how parameters get from user input into executable scripts.
-
-#### The Parameter Resolution Pipeline
-
-When a playbook is selected for execution, parameters flow through a multi-stage resolution process:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ STAGE 1: Playbook Selection                                     │
-├─────────────────────────────────────────────────────────────────┤
-│ User: "Shut down RDS instance for the weekend"                  │
-│   ↓                                                              │
-│ Playbook Agent returns: "Weekend RDS Shutdown v1.2.0"           │
-│   with parameters: [instance_id, snapshot_name, region, ...]    │
-└─────────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ STAGE 2: Auto-Fill Attempts                                     │
-├─────────────────────────────────────────────────────────────────┤
-│ For each parameter, system tries auto-fill strategy:            │
-│                                                                  │
-│ instance_id (user_estate):                                      │
-│   → Query: rds::instance WHERE tags.environment='production'    │
-│   → Result: Found 3 instances → User selects "prod-db-01"       │
-│                                                                  │
-│ region (context):                                               │
-│   → Extract from selected resource context                      │
-│   → Result: "us-east-1"                                          │
-│                                                                  │
-│ snapshot_name (generated):                                      │
-│   → Apply template: "weekend-shutdown-{instance_id}-{timestamp}"│
-│   → Result: "weekend-shutdown-prod-db-01-1728391162"            │
-│                                                                  │
-│ skip_snapshot (static):                                         │
-│   → Use default value                                            │
-│   → Result: false                                                │
-│                                                                  │
-│ dry_run (static):                                               │
-│   → Use default value                                            │
-│   → Result: false                                                │
-└─────────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ STAGE 3: User Prompts for Missing Parameters                    │
-├─────────────────────────────────────────────────────────────────┤
-│ If any required parameter couldn't be auto-filled:              │
-│                                                                  │
-│ UI displays the `prompt` field:                                 │
-│   ❓ "Which RDS instance would you like to shut down?"          │
-│   → User selects from dropdown or enters value                  │
-│                                                                  │
-│ UI may also prompt for optional parameters:                     │
-│   ❓ "Would you like to run this in dry-run mode first?"        │
-│   → User confirms or changes default                             │
-└─────────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ STAGE 4: Parameter Validation                                   │
-├─────────────────────────────────────────────────────────────────┤
-│ Validate each parameter against rules:                          │
-│                                                                  │
-│ instance_id: "prod-db-01"                                       │
-│   ✓ Matches pattern: ^[a-zA-Z][a-zA-Z0-9-]{0,62}$              │
-│   ✓ Length: 1-63 characters                                     │
-│                                                                  │
-│ skip_snapshot: false                                            │
-│   ✓ No warning (would warn if true)                             │
-│                                                                  │
-│ All validations pass → Parameters locked for execution          │
-└─────────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ STAGE 5: Parameter Context Built                                │
-├─────────────────────────────────────────────────────────────────┤
-│ Final parameter context for execution:                          │
-│                                                                  │
-│ {                                                                │
-│   "instance_id": "prod-db-01",                                   │
-│   "snapshot_name": "weekend-shutdown-prod-db-01-1728391162",     │
-│   "region": "us-east-1",                                         │
-│   "skip_snapshot": false,                                        │
-│   "dry_run": false                                               │
-│ }                                                                │
-│                                                                  │
-│ This context is available as ${playbook.*} variables            │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-#### Script Parameter Substitution During Execution
-
-Once parameters are resolved, the orchestration engine substitutes variables in each step's `parameter_mapping`:
-
-**Example from orchestration.json Step 1:**
-
-```json
-{
-  "step_number": 1,
-  "name": "Check RDS instance state",
-  "type": "script",
-  "script_ref": {
-    "script_id": "check-rds-state",
-    "version": "1.0.0"
-  },
-  "parameter_mapping": {
-    "instance_id": "${playbook.instance_id}",
-    "region": "${playbook.region}"
-  }
-}
-```
-
-**Substitution process:**
-
-```
-BEFORE substitution:
-{
-  "instance_id": "${playbook.instance_id}",
-  "region": "${playbook.region}"
-}
-
-AFTER substitution:
-{
-  "instance_id": "prod-db-01",
-  "region": "us-east-1"
-}
-```
-
-**The script receives:**
-```bash
-# check-rds-state.sh is executed with:
-INSTANCE_ID="prod-db-01"
-REGION="us-east-1"
-```
-
-#### Cross-Step Parameter Flow
-
-Parameters can flow between steps using `${stepN.output.*}` syntax:
-
-**Step 1 Output:**
-```json
-{
-  "snapshot_id": "snap-abc123",
-  "snapshot_arn": "arn:aws:rds:us-east-1:123456789:snapshot:snap-abc123",
-  "status": "completed"
-}
-```
-
-**Step 2 Parameter Mapping:**
-```json
-{
-  "step_number": 2,
-  "name": "Verify backup integrity",
-  "parameter_mapping": {
-    "snapshot_id": "${step1.output.snapshot_id}",      // → "snap-abc123"
-    "instance_id": "${playbook.instance_id}",          // → "prod-db-01"
-    "region": "${playbook.region}"                     // → "us-east-1"
-  }
-}
-```
-
-**Substitution happens sequentially:**
-1. Step 1 executes → produces output
-2. Output stored in execution context
-3. Step 2 mapping references `${step1.output.snapshot_id}`
-4. Orchestration engine substitutes with actual value
-5. Step 2 script receives resolved parameters
-
-#### Variable Substitution Types
-
-| Variable Type | Format | Example | Resolution Timing |
-|--------------|--------|---------|-------------------|
-| **Playbook parameter** | `${playbook.param}` | `${playbook.instance_id}` → `"prod-db-01"` | Before execution starts (Stage 5) |
-| **Previous step output** | `${stepN.output.field}` | `${step1.output.snapshot_id}` → `"snap-abc123"` | After step N completes |
-| **Cloud estate context** | `${estate.resource.field}` | `${estate.resource.region}` → `"us-east-1"` | From user's selected resource |
-| **Static value** | Direct value | `"us-west-2"` or `true` | No substitution needed |
-
-#### LLM's Role in Parameter Resolution
-
-**Important Clarification**: The LLM is **NOT** involved in parameter filling during execution.
-
-**What the LLM DOES** (pre-execution):
-- ✅ Search and rank playbooks based on user intent
-- ✅ Evaluate playbook candidates with full context
-- ✅ Explain why a playbook is recommended
-- ✅ Provide reasoning about parameter requirements
-
-**What the LLM DOES NOT DO** (during execution):
-- ❌ Fill parameter values at runtime
-- ❌ Perform variable substitution
-- ❌ Execute scripts or orchestration
-- ❌ Generate parameter values dynamically
-
-**Who Actually Fills Parameters:**
-1. **Auto-fill strategies**: Query user estate, extract from context, generate from templates
-2. **User input**: Via UI prompts when auto-fill fails or user override needed
-3. **Orchestration engine**: Performs variable substitution (`${playbook.*}`, `${stepN.output.*}`)
-4. **Execution engine**: Passes resolved parameters to scripts as environment variables
-
-#### Handling Unfillable Parameters
-
-**Key Concept**: When the LLM recommends a playbook during search (pre-execution), it analyzes which parameters can be auto-filled and which require user input. Parameters that cannot be auto-filled are **marked separately** and bucketed for collection before execution.
-
-**The Parameter Bucketing Process:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ STAGE 1: Playbook Agent Returns Playbook (Pre-Execution)        │
-├─────────────────────────────────────────────────────────────────┤
-│ LLM analyzes each parameter:                                    │
-│                                                                  │
-│ instance_id:                                                    │
-│   ✓ auto_fill_strategy: "user_estate"                          │
-│   ✓ CAN auto-fill from user's RDS instances                    │
-│   → Bucket: "AUTO_FILLABLE"                                     │
-│                                                                  │
-│ region:                                                         │
-│   ✓ auto_fill_strategy: "context"                              │
-│   ✓ CAN extract from selected resource context                 │
-│   → Bucket: "AUTO_FILLABLE"                                     │
-│                                                                  │
-│ snapshot_name:                                                  │
-│   ✓ auto_fill_strategy: "generated"                            │
-│   ✓ CAN generate using template                                │
-│   → Bucket: "AUTO_FILLABLE"                                     │
-│                                                                  │
-│ custom_note:                                                    │
-│   ❌ auto_fill_strategy: "prompt"                               │
-│   ❌ CANNOT auto-fill - requires user input                     │
-│   → Bucket: "REQUIRES_USER_INPUT"                               │
-│                                                                  │
-│ approval_email:                                                 │
-│   ❌ NO auto_fill_strategy defined                              │
-│   ❌ CANNOT auto-fill - missing strategy                        │
-│   → Bucket: "REQUIRES_USER_INPUT"                               │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Playbook Agent Response Structure:**
-
-The Playbook Agent returns playbooks with parameters pre-analyzed and bucketed:
-
-```json
-{
-  "rank": 1,
-  "playbook_id": "user-weekend-shutdown",
-  "version": "1.2.0",
-  "confidence": 0.95,
-
-  "parameters": {
-    "auto_fillable": [
-      {
-        "name": "instance_id",
-        "type": "string",
-        "description": "RDS instance identifier",
-        "prompt": "Which RDS instance would you like to shut down?",
-        "required": true,
-        "auto_fill_strategy": {
-          "source": "user_estate",
-          "estate_query": {
-            "resource_type": "rds::instance",
-            "filters": {"tags.environment": "production"}
-          }
-        },
-        "auto_fill_status": "CAN_AUTO_FILL",
-        "expected_value_count": 3
-      },
-      {
-        "name": "region",
-        "type": "string",
-        "description": "AWS region",
-        "prompt": "Which AWS region is the instance in?",
-        "required": true,
-        "auto_fill_strategy": {
-          "source": "context",
-          "context_field": "resource.region"
-        },
-        "auto_fill_status": "CAN_AUTO_FILL",
-        "expected_value": "us-east-1"
-      },
-      {
-        "name": "snapshot_name",
-        "type": "string",
-        "description": "Name for the backup snapshot",
-        "prompt": "What would you like to name the snapshot?",
-        "required": false,
-        "default": "auto-snapshot-{timestamp}",
-        "auto_fill_strategy": {
-          "source": "generated",
-          "template": "weekend-shutdown-{instance_id}-{timestamp}"
-        },
-        "auto_fill_status": "CAN_AUTO_FILL"
-      }
-    ],
-
-    "requires_user_input": [
-      {
-        "name": "custom_note",
-        "type": "string",
-        "description": "Optional note about this shutdown",
-        "prompt": "Would you like to add a note about why you're shutting down this instance?",
-        "required": false,
-        "default": "",
-        "auto_fill_strategy": {
-          "source": "prompt"
-        },
-        "auto_fill_status": "REQUIRES_USER_INPUT",
-        "reason": "No automatic source available - requires user input"
-      },
-      {
-        "name": "approval_email",
-        "type": "string",
-        "description": "Email to notify after shutdown",
-        "prompt": "Who should be notified after the instance is shut down?",
-        "required": true,
-        "auto_fill_status": "REQUIRES_USER_INPUT",
-        "reason": "No auto_fill_strategy defined"
-      }
-    ]
-  }
-}
-```
-
-**UI Workflow Based on Buckets:**
-
-```
-User selects playbook: "user-weekend-shutdown"
-    ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ STEP 1: Auto-Fill Attempts                                      │
-├─────────────────────────────────────────────────────────────────┤
-│ Frontend processes "auto_fillable" bucket:                      │
-│                                                                  │
-│ instance_id:                                                    │
-│   → Query user_estate                                           │
-│   → Found: ["prod-db-01", "prod-db-02", "dev-db-01"]           │
-│   → Present dropdown to user                                    │
-│                                                                  │
-│ region:                                                         │
-│   → Extract from context                                        │
-│   → Result: "us-east-1" (auto-filled silently)                 │
-│                                                                  │
-│ snapshot_name:                                                  │
-│   → Generate from template                                      │
-│   → Result: "weekend-shutdown-{instance_id}-{timestamp}"        │
-│   → (Will be completed after user selects instance_id)         │
-└─────────────────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ STEP 2: Collect User Input                                      │
-├─────────────────────────────────────────────────────────────────┤
-│ Frontend processes "requires_user_input" bucket:                │
-│                                                                  │
-│ UI displays form with ONLY unfilled parameters:                 │
-│                                                                  │
-│ ┌─────────────────────────────────────────────────────────────┐ │
-│ │ Required Parameters                                         │ │
-│ ├─────────────────────────────────────────────────────────────┤ │
-│ │ ✓ Instance ID: [prod-db-01        ▼]  (auto-filled)       │ │
-│ │ ✓ Region:      us-east-1               (auto-filled)       │ │
-│ │ ✓ Snapshot:    weekend-shutdown-prod-db-01-1728391162      │ │
-│ │                                        (auto-generated)     │ │
-│ │                                                             │ │
-│ │ ❌ Approval Email: [________________]  (REQUIRED)           │ │
-│ │    💡 "Who should be notified after shutdown?"             │ │
-│ └─────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│ ┌─────────────────────────────────────────────────────────────┐ │
-│ │ Optional Parameters                                         │ │
-│ ├─────────────────────────────────────────────────────────────┤ │
-│ │ Custom Note: [________________________________]             │ │
-│ │    💡 "Add a note about why you're shutting down?"         │ │
-│ └─────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│ [Cancel]                               [Execute Playbook →]     │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Parameter Resolution Status Types:**
-
-| Status | Meaning | UI Behavior |
-|--------|---------|-------------|
-| `CAN_AUTO_FILL` | Has auto_fill_strategy that will succeed | Attempt auto-fill, show in dropdown/pre-filled |
-| `REQUIRES_USER_INPUT` | No auto_fill strategy OR strategy is "prompt" | Always show input field with prompt text |
-| `AUTO_FILL_FAILED` | Had auto_fill strategy but it failed | Show error + fallback to user input field |
-| `AUTO_FILLED` | Successfully auto-filled | Show as pre-filled (editable) |
-
-**Error Handling: When Auto-Fill Fails:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ SCENARIO: Auto-fill strategy fails at runtime                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│ instance_id (user_estate strategy):                             │
-│   → Query user_estate for RDS instances                         │
-│   → Result: NO instances found (empty result)                   │
-│   → Status: AUTO_FILL_FAILED                                    │
-│   → Action: Move to "requires_user_input" bucket                │
-│                                                                  │
-│ UI updates dynamically:                                         │
-│   ❌ Instance ID: [________________]  (REQUIRED)                 │
-│       ⚠️ "Could not find RDS instances in your estate"          │
-│       💡 "Enter the instance ID manually"                       │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Benefits of Parameter Bucketing:**
-
-1. **Clear Separation**: System knows upfront what can be automated vs what needs user input
-2. **Better UX**: Users only see fields that require their attention
-3. **Faster Execution**: Auto-fillable parameters are resolved in parallel
-4. **Explicit Feedback**: Users know WHY they need to fill a parameter (via `reason` field)
-5. **Graceful Degradation**: Auto-fill failures are handled by moving to user input bucket
-
-**LLM's Role in Bucketing (Pre-Execution):**
-
-During playbook ranking (STEP 2), the LLM analyzes the user's context to predict auto-fill success:
-
-```
-LLM Prompt:
-"Analyze these parameters for auto-fill feasibility:
-
-USER CONTEXT:
-- Has 3 RDS instances in estate (prod-db-01, prod-db-02, dev-db-01)
-- Currently viewing: prod-db-01 (region: us-east-1)
-- User role: DevOps Engineer
-
-PARAMETERS:
-1. instance_id (auto_fill: user_estate, query: rds::instance)
-2. region (auto_fill: context, field: resource.region)
-3. approval_email (auto_fill: NONE)
-
-For each parameter, return:
-- auto_fill_status: CAN_AUTO_FILL | REQUIRES_USER_INPUT
-- reason: Why it can/cannot be auto-filled
-- expected_value or expected_value_count (if applicable)
-"
-```
-
-**LLM Response:**
-```json
-{
-  "parameters_analysis": [
-    {
-      "name": "instance_id",
-      "auto_fill_status": "CAN_AUTO_FILL",
-      "reason": "User has 3 RDS instances in estate - can present dropdown",
-      "expected_value_count": 3,
-      "confidence": 0.95
-    },
-    {
-      "name": "region",
-      "auto_fill_status": "CAN_AUTO_FILL",
-      "reason": "User is viewing prod-db-01 in us-east-1 - can extract from context",
-      "expected_value": "us-east-1",
-      "confidence": 1.0
-    },
-    {
-      "name": "approval_email",
-      "auto_fill_status": "REQUIRES_USER_INPUT",
-      "reason": "No auto_fill_strategy defined - requires user to provide email",
-      "confidence": 1.0
-    }
-  ]
-}
-```
-
-**Key Takeaway**: The LLM's job during search is to **predict** which parameters will need user input, so the UI can prepare the right form fields. The actual parameter resolution happens later during execution using the deterministic auto-fill strategies.
-
-
-#### Complete Example: Weekend RDS Shutdown
-
-Let's trace how parameters flow through the entire system for the "Weekend RDS Shutdown" playbook:
-
-**1. Playbook metadata.json defines parameters:**
 ```json
 {
   "parameters": [
     {
       "name": "instance_id",
       "type": "string",
+      "description": "RDS instance identifier",
       "prompt": "Which RDS instance would you like to shut down?",
       "required": true,
-      "auto_fill_strategy": {
+      "default": null,
+      "validation": {
+        "pattern": "^[a-zA-Z][a-zA-Z0-9-]{0,62}$",
+        "min_length": 1,
+        "max_length": 63
+      },
+      "extraction_hint": {
         "source": "user_estate",
         "estate_query": {
           "resource_type": "rds::instance",
-          "filters": {"tags.environment": "production"}
-        }
+          "filters": {
+            "tags.environment": "production",
+            "state": "available"
+          }
+        },
+        "display_field": "name",
+        "value_field": "identifier"
       }
     },
     {
       "name": "snapshot_name",
       "type": "string",
+      "description": "Name for the backup snapshot (optional)",
       "prompt": "What would you like to name the snapshot?",
       "required": false,
       "default": "auto-snapshot-{timestamp}",
-      "auto_fill_strategy": {
+      "extraction_hint": {
         "source": "generated",
         "template": "weekend-shutdown-{instance_id}-{timestamp}"
       }
@@ -1086,131 +617,52 @@ Let's trace how parameters flow through the entire system for the "Weekend RDS S
     {
       "name": "region",
       "type": "string",
+      "description": "AWS region",
       "prompt": "Which AWS region is the instance in?",
       "required": true,
-      "auto_fill_strategy": {
+      "extraction_hint": {
         "source": "context",
         "context_field": "resource.region"
+      }
+    },
+    {
+      "name": "approval_email",
+      "type": "string",
+      "description": "Email to notify",
+      "prompt": "Who should be notified?",
+      "required": true,
+      "extraction_hint": {
+        "source": "prompt"
       }
     }
   ]
 }
 ```
 
-**2. User searches: "shut down RDS for weekend"**
-- Playbook Agent returns: "Weekend RDS Shutdown v1.2.0"
+#### Extraction Hint Sources
 
-**3. Auto-fill attempts:**
-```
-instance_id:
-  → Query user estate for RDS instances
-  → Found: ["prod-db-01", "prod-db-02", "dev-db-01"]
-  → UI shows dropdown, user selects "prod-db-01"
+These hints tell the **Master Agent** (server-side LLM) where to look for parameter values:
 
-snapshot_name:
-  → Apply template: "weekend-shutdown-{instance_id}-{timestamp}"
-  → Substitute: {instance_id} → "prod-db-01"
-  → Substitute: {timestamp} → "1728391162"
-  → Result: "weekend-shutdown-prod-db-01-1728391162"
+| Source | Description | How Master Agent Uses It |
+|--------|-------------|---------------------------|
+| `user_estate` | Query user's cloud resources | Master Agent looks in the estate_context JSON sent by client for matching resources |
+| `context` | Extract from execution context | Master Agent examines the resource context to find this value |
+| `generated` | Generate using template | Master Agent generates value using template (timestamps, names) |
+| `static` | Use fixed value | Master Agent uses the default value |
+| `prompt` | Ask user (cannot extract) | Master Agent cannot extract → leaves empty → User fills manually |
 
-region:
-  → Extract from context (user selected resource in us-east-1)
-  → Result: "us-east-1"
-```
+**Critical Understanding**: 
 
-**4. Parameter context built:**
-```json
-{
-  "instance_id": "prod-db-01",
-  "snapshot_name": "weekend-shutdown-prod-db-01-1728391162",
-  "region": "us-east-1",
-  "skip_snapshot": false,
-  "dry_run": false
-}
-```
+1. **Master Agent** (server LLM) reads these hints and tries to extract parameter values
+2. **Playbook Agent** receives parameters **already extracted** by Master Agent  
+3. **Client** receives playbook with:
+   - Parameters Master Agent extracted: filled with values
+   - Parameters Master Agent couldn't extract: empty placeholders ""
+4. **User** manually fills any empty parameters
+5. **Client** executes with all parameters filled
 
-**5. Orchestration Step 1 executes:**
+**There is NO client-side parameter extraction or "auto-fill". Only the Master Agent (server LLM) extracts parameters.**
 
-orchestration.json:
-```json
-{
-  "step_number": 1,
-  "name": "Check RDS instance state",
-  "script_ref": {"script_id": "check-rds-state"},
-  "parameter_mapping": {
-    "instance_id": "${playbook.instance_id}",
-    "region": "${playbook.region}"
-  }
-}
-```
-
-Orchestration engine substitutes:
-```json
-{
-  "instance_id": "prod-db-01",
-  "region": "us-east-1"
-}
-```
-
-Script executes:
-```bash
-#!/bin/bash
-INSTANCE_ID="prod-db-01"
-REGION="us-east-1"
-
-aws rds describe-db-instances \
-  --db-instance-identifier "$INSTANCE_ID" \
-  --region "$REGION"
-```
-
-**6. Step 1 produces output:**
-```json
-{
-  "instance_state": "available",
-  "instance_arn": "arn:aws:rds:us-east-1:123456789:db:prod-db-01"
-}
-```
-
-**7. Orchestration Step 2 executes:**
-
-orchestration.json:
-```json
-{
-  "step_number": 2,
-  "name": "Create RDS snapshot",
-  "script_ref": {"script_id": "create-rds-snapshot"},
-  "parameter_mapping": {
-    "instance_id": "${playbook.instance_id}",
-    "snapshot_name": "${playbook.snapshot_name}",
-    "region": "${playbook.region}",
-    "instance_arn": "${step1.output.instance_arn}"
-  }
-}
-```
-
-Orchestration engine substitutes:
-```json
-{
-  "instance_id": "prod-db-01",
-  "snapshot_name": "weekend-shutdown-prod-db-01-1728391162",
-  "region": "us-east-1",
-  "instance_arn": "arn:aws:rds:us-east-1:123456789:db:prod-db-01"
-}
-```
-
-Script executes with resolved parameters, and so on...
-
-#### Key Takeaways
-
-1. **Parameters are resolved BEFORE execution starts** (except step outputs)
-2. **Auto-fill strategies reduce user burden** by querying resources, extracting context, or generating values
-3. **The `prompt` field is critical** for when auto-fill fails or user override is needed
-4. **Variable substitution happens at the orchestration layer**, not in the LLM
-5. **Step outputs enable chaining** by making previous results available to subsequent steps
-6. **The execution engine is deterministic** - no AI inference during parameter resolution
-7. **Pre-validation ensures prerequisites are met** before attempting operations (catches issues early)
-8. **Post-validation confirms operations actually succeeded** (not just "command accepted")
-9. **Failure handling strategies provide smart recovery** - stop for critical, retry for transient, ignore for non-critical
 10. **Step importance communicates criticality** - users understand which steps are essential vs nice-to-have
 
 ### 3. orchestration.json Structure (NEW)
@@ -2775,7 +2227,7 @@ The Master Agent extracts potential parameter values from:
 1. **Search**: Uses `action`, `cloud_provider`, `resource_types`, `keywords` for RAG search
 2. **Ranking**: Considers `use_case`, `filters`, `time_based` when ranking playbooks
 3. **Parameter Pre-filling**: Passes `extracted_parameters` to returned playbooks
-4. **Context Analysis**: LLM uses `user_context` to predict which parameters can be auto-filled
+4. **Context Analysis**: LLM uses `user_context` to predict which parameters can be parameter extractioned
 
 **Example: From User Query to Structured Input**
 
@@ -3009,7 +2461,7 @@ Return JSON array sorted by rank.
         "instance_id": {
           "type": "string",
           "required": true,
-          "auto_fill_strategy": {
+          "extraction_hint": {
             "source": "user_estate",
             "estate_query": {
               "resource_type": "rds::instance",
@@ -3072,14 +2524,14 @@ Return JSON array sorted by rank.
 - ✅ Ranked list (top 3-5 playbooks)
 - ✅ Full explain plan for each
 - ✅ Complete scripts (shell, python, terraform, cloudformation)
-- ✅ Parameters with auto-fill hints
+- ✅ Parameters with parameter extraction hints
 - ✅ LLM-generated reasoning
 - ✅ Confidence scores
 
 **Client's Next Steps**:
 1. User reviews explain plans
 2. Selects preferred playbook (usually rank 1)
-3. Reviews/fills parameters (auto-fill helps)
+3. Reviews/fills parameters (parameter extraction helps)
 4. Execution Engine runs the script
 
 ---
@@ -3989,71 +3441,45 @@ Playbook Agent updates RAG with metadata + S3 paths
 
 ---
 
-### File Download Flow
+### Script Delivery: Embedded in Response
 
-#### Client ← S3 Download
+**IMPORTANT**: Scripts are NOT downloaded separately by the client. They are embedded in the playbook search response.
 
 ```
-User selects playbook to execute
-    ↓
-┌────────────────────────────────────────────────────┐
-│ Playbook Service (Client)                          │
-├────────────────────────────────────────────────────┤
-│ 1. Check if script exists locally                  │
-│    → NOT FOUND                                     │
-│                                                     │
-│ 2. Request download URL from server                │
-│    GET /api/script/download?                       │
-│        playbook_id=user-weekend-shutdown&          │
-│        version=1.2.0&                              │
-│        format=shell&                               │
-│        tenant_id=abc123                            │
-└────────────────────────────────────────────────────┘
-    ↓
-┌────────────────────────────────────────────────────┐
-│ Playbook Agent (Server)                            │
-├────────────────────────────────────────────────────┤
-│ 1. Lookup playbook metadata from RAG               │
-│    storage.get_point(                              │
-│      "tenant_abc123_playbooks",                    │
-│      "user-weekend-shutdown-v1.2.0"                │
-│    )                                               │
-│    → Get S3 path from payload                      │
-│                                                     │
-│ 2. Generate pre-signed download URL                │
-│    s3_client.generate_presigned_url(               │
-│      'get_object',                                 │
-│      Bucket='escher-tenant-data',                  │
-│      Key='tenants/abc123/playbooks/.../main.sh',   │
-│      ExpiresIn=3600  # 1 hour                      │
-│    )                                               │
-│                                                     │
-│ 3. Return download URL + checksum                  │
-│    {                                               │
-│      "url": "https://s3...?signature",             │
-│      "checksum": "sha256:abc123...",               │
-│      "size_bytes": 4096,                           │
-│      "expires_at": 1728394762                      │
-│    }                                               │
-└────────────────────────────────────────────────────┘
-    ↓
-┌────────────────────────────────────────────────────┐
-│ Playbook Service (Client)                          │
-├────────────────────────────────────────────────────┤
-│ 1. Download from S3                                │
-│    GET https://s3...?signature                     │
-│                                                     │
-│ 2. Verify checksum                                 │
-│    sha256(downloaded_file) == expected_checksum    │
-│                                                     │
-│ 3. Cache locally                                   │
-│    ~/.escher/cache/scripts/                        │
-│      user-weekend-shutdown-v1.2.0/shell/main.sh    │
-│                                                     │
-│ 4. Return local path to execution engine           │
-└────────────────────────────────────────────────────┘
+Server Response Structure:
+{
+  "playbooks": [
+    {
+      "playbook_id": "user-weekend-shutdown",
+      "version": "1.2.0",
+      "steps": [
+        {
+          "id": "step-1",
+          "script": "#!/bin/bash\n# Complete script embedded here",
+          "parameters": ["{{instance_id}}"]
+        }
+      ],
+      "parameters": {
+        "instance_id": "prod-db-01",    ← Pre-filled by Master Agent
+        "approval_email": ""            ← Placeholder (user fills)
+      }
+    }
+  ]
+}
 ```
 
+**Client responsibilities**:
+- Receives complete playbook with embedded scripts
+- Shows parameters to user (some pre-filled, some placeholders)
+- User manually fills any empty parameters
+- Writes scripts to temporary files for execution
+- Executes scripts locally with user's AWS credentials
+
+**Why embedded scripts?**
+- ✅ No S3 permissions needed on client
+- ✅ Single API call gets everything
+- ✅ Simpler client implementation
+- ✅ No download errors or network issues during execution
 ---
 
 ### S3 Lifecycle Policies
@@ -4349,37 +3775,58 @@ Server → Frontend:
     }
 ```
 
-### Flow 2: Client Resolves Playbook Scripts
+### Flow 2: User Reviews and Executes Playbook
 
 ```
-User selects: "user-weekend-shutdown-v1.2.0"
-    ↓
-Frontend → Playbook Service (Rust, client-side):
-    resolve_script("user-weekend-shutdown", "1.2.0", "shell")
+User selects: "user-weekend-shutdown-v1.2.0" from search results
     ↓
 ┌────────────────────────────────────────────────────┐
-│ Playbook Service (Client)                          │
-├──────────────────────────��─────────────────────────┤
-│ 1. Check local storage                             │
-│    path = ~/.escher/playbooks/synced/              │
-│           user-weekend-shutdown/v1.2.0/shell/      │
-│    → FOUND! Return local path                      │
-│                                                     │
-│ (If NOT found locally)                             │
-│ 2. Check cache                                     │
-│    path = ~/.escher/cache/scripts/                 │
-│           user-weekend-shutdown-v1.2.0/            │
-│    → If found & fresh → Return cached path         │
-│                                                     │
-│ 3. Download from S3                                │
-│    GET /api/script/download?                       │
-│        s3_path=s3://escher-tenant-data/...         │
-│    → Server returns pre-signed URL                 │
-│    → Download & cache                              │
-│    → Return cached path                            │
+│ Client Receives Complete Playbook from Server     │
+├────────────────────────────────────────────────────┤
+│ Response includes:                                 │
+│   - Playbook metadata                              │
+│   - Scripts EMBEDDED in steps (no download needed) │
+│   - Parameters with values:                        │
+│     • instance_id: "prod-db-01" ← Filled by Master │
+│     • region: "us-east-1"       ← Filled by Master │
+│     • approval_email: ""        ← PLACEHOLDER      │
 └────────────────────────────────────────────────────┘
     ↓
-Execution Engine executes script at resolved path
+┌────────────────────────────────────────────────────┐
+│ Client UI Shows Playbook to User                   │
+├────────────────────────────────────────────────────┤
+│                                                     │
+│  Playbook: Weekend RDS Shutdown                    │
+│                                                     │
+│  Parameters:                                       │
+│    ✓ Instance ID:     prod-db-01  (pre-filled)    │
+│    ✓ Region:          us-east-1   (pre-filled)    │
+│    ⚠ Approval Email:  [_______]   (USER MUST FILL)│
+│                                                     │
+│  Steps:                                            │
+│    1. Validate instance exists                     │
+│    2. Create snapshot                              │
+│    3. Stop RDS instance                            │
+│                                                     │
+│  [Cancel]  [Execute Playbook]                      │
+│                                                     │
+└────────────────────────────────────────────────────┘
+    ↓
+User fills missing parameter: approval_email = "admin@company.com"
+    ↓
+User clicks "Execute Playbook"
+    ↓
+┌────────────────────────────────────────────────────┐
+│ Client Execution Engine                            │
+├────────────────────────────────────────────────────┤
+│ 1. Validates all required parameters filled        │
+│ 2. Writes embedded scripts to temp files          │
+│ 3. Substitutes parameters into script templates   │
+│ 4. Executes scripts locally (bash/python/node)    │
+│ 5. Streams progress to user                        │
+└────────────────────────────────────────────────────┘
+    ↓
+Scripts execute on user's machine with user's AWS credentials
 ```
 
 ### Flow 3: User Publishes Playbook
@@ -4568,7 +4015,7 @@ Quality scores affect playbook ranking and user experience:
     "strengths": [
       "Excellent error handling with rollback strategy",
       "Comprehensive explain plan with clear risks and mitigations",
-      "Good parameter validation with auto-fill strategies",
+      "Good parameter validation with parameter extraction strategies",
       "Idempotent design - safe to retry",
       "Clear documentation and examples"
     ],
@@ -4630,7 +4077,7 @@ See [Playbook Best Practices - Validation Rules](playbook-best-practices.md#vali
 
 Key validations include:
 - **Metadata**: Required fields, format, length constraints
-- **Parameters**: Naming conventions, validation rules, auto-fill strategies
+- **Parameters**: Naming conventions, validation rules, parameter extraction strategies
 - **Scripts**: Error handling, idempotency, output format
 - **Documentation**: Explain plan completeness, risk documentation, rollback strategy
 - **Security**: No hardcoded credentials, input sanitization, permissions documented
