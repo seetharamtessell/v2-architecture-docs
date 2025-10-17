@@ -12,6 +12,14 @@
 
 ---
 
+**Multi-Cloud Note**: This documentation primarily uses AWS examples (S3, RDS, EC2) for concreteness. The same architecture applies to:
+- **Azure**: Blob Storage, Azure Database, Container Instances, Logic Apps
+- **GCP**: Cloud Storage, Cloud SQL, Cloud Run, Cloud Scheduler
+
+All playbooks support multi-cloud operations through the `cloud_provider` field, which accepts `["aws"]`, `["azure"]`, `["gcp"]`, or combinations like `["aws", "azure", "gcp"]`.
+
+---
+
 ## Table of Contents
 
 1. [What It Does](#what-it-does)
@@ -95,6 +103,8 @@ Playbooks and Scripts are **separated** like a normalized database:
 - ✅ **Independent Versioning**: Update script without touching playbooks
 - ✅ **Multi-Implementation**: Same script in bash/python/node/terraform/cloudformation
 - ✅ **User Choice**: Select implementation at execution time
+
+**Parameter Extraction Responsibility**: The Master Agent (a separate server-side agent) performs all parameter extraction using LLM analysis of user prompts and estate context. The Playbook Agent receives these **already-extracted** parameters in structured JSON format. Neither the Playbook Agent nor the client performs parameter extraction. See Master Agent documentation for details on parameter extraction flow.
 
 ---
 
@@ -2553,7 +2563,7 @@ Every playbook has a **status** field that controls its behavior in search, rank
     └───→ (No longer supported)
           ┌──────────┐
           │ archived │ ← Removed from search
-          └──────────┘
+          └─────���────┘
 ```
 
 ---
