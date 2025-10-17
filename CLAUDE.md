@@ -11,17 +11,59 @@ This is the **v2-architecture-docs** repository - the single source of truth for
 1. **Architectural Purity**: Document the "what" and "why", not implementation details or code-level specifics
 2. **High-Level Focus**: Maintain the big picture view across the entire system ecosystem
 3. **Client-Server Separation**: The architecture has two distinct worlds:
-   - **Client**: Tauri-based app with local AWS estate, Qdrant vector DB, and secure credential storage
-   - **Server**: Multi-agent system with microservices for operations intelligence (NO AWS credentials/estate stored)
+   - **Client**: Tauri-based app with local cloud estate (AWS/Azure/GCP), Qdrant vector DB, and secure credential storage
+   - **Server**: Multi-agent system with microservices for operations intelligence (NO cloud credentials/estate stored)
 
 ## Architecture Overview
 
 The system architecture is based on these core principles:
-- **Client-side AWS Estate Management**: All AWS resource data and credentials stay local
-- **Server-side Operations Knowledge**: Stateless server provides playbook execution logic
-- **Privacy First**: AWS credentials and estate data never sent to server
-- **Semantic Search**: Local Qdrant vector DB enables fast, fuzzy resource lookup
+- **Client-side Cloud Estate Management**: All cloud resource data (AWS/Azure/GCP) and credentials stay local
+- **Server-side Operations Knowledge**: Stateless server provides playbook execution logic and LLM intelligence
+- **Privacy First**: Cloud credentials and estate data never sent to server
+- **Semantic Search**: Local Qdrant vector DB enables fast, fuzzy resource lookup across all clouds
 - **Precision Over Guessing**: Client sends complete context; server generates exact scripts
+
+## Critical Architecture Corrections (October 2025)
+
+**IMPORTANT**: Recent documentation review revealed and corrected fundamental architectural misunderstandings. When working on this codebase, remember:
+
+### Parameter Extraction Flow (CRITICAL)
+
+**CORRECT Flow**:
+```
+Client → Master Agent (extracts parameters using LLM) →
+Playbook Agent (receives extracted parameters, searches playbooks) →
+Client (displays with pre-filled + placeholder parameters) →
+User (manually fills empty placeholders) →
+Client (executes scripts locally)
+```
+
+**Key Points**:
+- ✅ **Master Agent** (server LLM) extracts parameters from user prompt + estate context
+- ✅ **Playbook Agent** receives parameters ALREADY EXTRACTED by Master Agent
+- ✅ **Client** has NO LLM access, does NOT extract parameters, does NOT auto-fill
+- ✅ **User** manually fills any empty parameter fields
+- ✅ **Scripts** are embedded in response, NOT downloaded from S3 by client
+
+**Common Mistakes to Avoid**:
+- ❌ Saying "client extracts parameters" or "client auto-fills parameters"
+- ❌ Saying "client downloads scripts from S3"
+- ❌ Using terminology like "auto_fill_strategy" (use "extraction_hint" instead)
+- ❌ Implying client has LLM capabilities
+
+**Correct Terminology**:
+- `extraction_hint` - tells Master Agent where to look for values
+- "pre-filled by Master Agent" - parameters extracted by Master Agent
+- "placeholder" - empty parameter that user must fill manually
+- "embedded scripts" - scripts included in API response payload
+
+### Agent Responsibilities
+
+| Agent | Location | Has LLM? | Responsibility |
+|-------|----------|----------|----------------|
+| **Master Agent** | Server | ✅ Yes | Intent classification + **parameter extraction** |
+| **Playbook Agent** | Server | ✅ Yes | Search & ranking (receives extracted params) |
+| **Client** | Local | ❌ No | Display + user input + execution only |
 
 ## Directory Structure
 
@@ -62,7 +104,7 @@ docs/
 │   ├── agents/           # Multi-agent system
 │   │   ├── overview.md
 │   │   ├── ui-agent.md           ✅ Complete (comprehensive) - Server-side UI intelligence
-│   │   └── playbook-agent.md     ✅ Complete (~2,227 lines) - LLM + RAG intelligence
+│   │   └── playbook-agent.md     ✅ Complete (~4,637 lines) - LLM + RAG intelligence
 │   ├── microservices/    # Service-oriented architecture
 │   ├── data/             # Redis, Qdrant (playbooks), Git repo
 │   ├── infrastructure/   # Deployment, service mesh, scaling
@@ -119,6 +161,17 @@ repositories/             # Catalog of all related repositories
 3. **Server Complexity**: The server side is a complex ecosystem with multiple agents and microservices - give it proper depth
 4. **Maintain Separation**: Keep client and server concerns clearly separated
 5. **Update Diagrams**: When architecture changes, update both diagrams and their source files
+6. **Validate Architectural Correctness**: Always verify who does what (especially parameter extraction!)
+
+### Document Quality Checklist
+
+Before committing documentation changes, verify:
+- [ ] Client responsibilities clearly separated from server responsibilities
+- [ ] No client-side parameter extraction references (only Master Agent extracts)
+- [ ] Correct terminology: "extraction_hint" not "auto_fill_strategy"
+- [ ] Multi-cloud context: "cloud estate" not "AWS estate" (unless AWS-specific)
+- [ ] Scripts embedded in response, not downloaded by client
+- [ ] Consistent with [PROJECT-SUMMARY.md](PROJECT-SUMMARY.md) architecture
 
 ### When to Create ADRs
 
@@ -143,27 +196,32 @@ Use the [adr/template.md](adr/template.md) for consistency.
 ### Request Flow
 1. **Client**: User prompt → Semantic search in local Qdrant → Resource identification with full metadata
 2. **Client**: Build enriched request with complete context (account, region, permissions, constraints)
-3. **Server**: Receive complete context → Classification agent → RAG search → Operations agent → Generate script
-4. **Client**: Receive ready-to-execute script → Display + approval → Execute locally
+3. **Server - Master Agent**: Receive complete context → Classify intent → **Extract parameters using LLM**
+4. **Server - Playbook Agent**: Receive extracted parameters → RAG search → LLM ranking → Return playbook
+5. **Client**: Receive playbook with pre-filled + placeholder parameters → User fills placeholders → Display + approval → Execute locally
 
 ### Data Flow
-- **AWS estate sync**: Periodic sync (6h full, 15min incremental) from AWS APIs → Transform → Embed → Qdrant
+- **Cloud estate sync**: Periodic sync (6h full, 15min incremental) from AWS/Azure/GCP APIs → Transform → Embed → Qdrant
 - **Credentials**: Stored in OS Keychain, never leave client
-- **Playbooks**: Stored in Git on server, indexed in server-side Qdrant
+- **Playbooks**: Stored in S3 on server, indexed in server-side Qdrant, scripts embedded in API response
 
-### Client Storage Service
+### Client Storage Service (6 RAG Collections)
 - **Single Qdrant Instance**: Embedded mode, ~20-30 MB
-- **Chat History**: Dummy vectors (1D), filter-based access, encrypted content
-- **AWS Estate**: Real embeddings (384D), semantic search + filters, **IAM permissions embedded per resource**
-- **IAM Integration**: Each resource stores its allowed/denied actions and user context
+- **Collections**:
+  1. **Cloud Estate Inventory** (Real 384D vectors) - AWS/Azure/GCP resources with semantic search + IAM permissions
+  2. **Chat History** (Dummy 1D vectors) - Filter-based access, encrypted content
+  3. **Executed Operations** - History of operations executed
+  4. **Immutable Reports** - Cost reports, audit logs, compliance reports
+  5. **Alerts & Events** - Alert rules, scan results, auto-remediation settings
+  6. **User Playbooks** (Real 384D vectors) - Custom playbooks with full scripts, encrypted
 - **Point ID Strategy**: Random UUIDs for chat (immutable), deterministic IDs for estate (mutable, prevents duplicates)
 - **Encryption**: AES-256-GCM with OS Keychain (macOS/Windows/Linux)
 - **Backup**: Auto S3 sync with configurable retention (7 days local, 30 days S3)
 
 ### Client Module Architecture
-- **Storage Service**: Single Qdrant instance, dual collections (chat + estate), IAM integration
+- **Storage Service**: Single Qdrant instance, 6 RAG collections, IAM integration, encryption
 - **Execution Engine**: Pure Rust crate, Tokio + streaming, background execution
-- **Estate Scanner**: Thin orchestrator, pluggable scanners, IAM discovery, semantic embeddings
+- **Estate Scanner**: Thin orchestrator, pluggable scanners (AWS/Azure/GCP), IAM discovery, semantic embeddings
 - **Common Types**: Shared data structures (AWSResource, IAMPermissions, etc.), zero framework deps
 - **Request Builder**: (To be designed) Context enrichment, server communication
 
@@ -191,19 +249,19 @@ Use the [adr/template.md](adr/template.md) for consistency.
 These are **Rust crates** (like npm packages) used by both client and server:
 
 - **Storage Service** (storage-service crate):
-  - Client uses: Embedded Qdrant for local AWS estate + chat history (encrypted)
+  - Client uses: Embedded Qdrant for local cloud estate (AWS/Azure/GCP) + chat history + 6 RAG collections (encrypted)
   - Server uses: Embedded Qdrant for playbook metadata + S3 paths (not encrypted)
   - Key difference: Client stores full data, server stores metadata + S3 references
   - Both: Same API, same Rust crate, different Qdrant collections
 
 - **Execution Engine** (execution-engine crate):
-  - Client uses: Execute AWS CLI commands, bash scripts, Python scripts locally
+  - Client uses: Execute AWS/Azure/GCP CLI commands, bash scripts, Python scripts locally
   - Server uses: (Future) Execute validation scripts, test playbooks
   - Pure Rust crate with Tokio + streaming, no framework dependencies
 
 - **Estate Scanner** (estate-scanner crate):
-  - Client uses: Scan local AWS accounts and populate Qdrant
-  - Server uses: Not used (server has no AWS credentials)
+  - Client uses: Scan local cloud accounts (AWS/Azure/GCP) and populate Qdrant
+  - Server uses: Not used (server has no cloud credentials)
   - Thin orchestrator over Execution Engine + Storage Service
 
 - **Common Types** (cloudops-common crate):
@@ -219,7 +277,16 @@ These are **Rust crates** (like npm packages) used by both client and server:
 **Key Insight**: Same Rust code, different deployment contexts. Client has full data + encryption, server has metadata + S3 references.
 
 ### Server Agent System
-- **UI Agent** (Server-Side Presentation Intelligence): Transforms raw backend responses into structured UI specifications
+
+- **Master Agent** (Intent Classification & Parameter Extraction):
+  - **CRITICAL**: This agent extracts parameters using LLM
+  - **Input**: Raw user prompt + chat history + estate context from client
+  - **Output**: Structured JSON with intent classification + **extracted_parameters**
+  - **LLM-Powered**: Uses Claude/GPT to understand natural language and extract values
+  - **Key Role**: The ONLY component that extracts parameters (neither client nor Playbook Agent does this)
+
+- **UI Agent** (Server-Side Presentation Intelligence):
+  - Transforms raw backend responses into structured UI specifications
   - **Purpose**: Server-side intelligence that decides optimal UI presentation
   - **Input**: Raw responses from other agents (Cost Agent, Analysis Agent, etc.)
   - **Output**: Structured JSON with UI markers + dual outputs (UI mode + history digest)
@@ -231,6 +298,8 @@ These are **Rust crates** (like npm packages) used by both client and server:
 
 - **Playbook Agent**: LLM + RAG intelligent playbook search and recommendation
   - **4-Step Intelligence Flow**: LLM Intent Understanding → RAG Vector Search → LLM Ranking & Reasoning → Package & Return
+  - **CRITICAL INPUT**: Receives structured JSON from Master Agent with **parameters already extracted**
+  - **Does NOT Extract Parameters**: Master Agent does this - Playbook Agent just searches and ranks
   - **Normalized Storage Architecture**: Scripts and playbooks separated (database-style with foreign key references)
   - **Three Playbook Types**: Pure Script (only script_refs), Pure Orchestration (only playbook_refs), Hybrid (mix of both)
   - **Multi-Implementation Support**: Same script in bash/python/node/terraform/cloudformation - user chooses at runtime
@@ -240,13 +309,16 @@ These are **Rust crates** (like npm packages) used by both client and server:
   - **Playbook Lifecycle**: 10 status values (draft, ready, active, deprecated, archived, pending_review, approved, rejected, broken, needs_update)
   - **Storage Strategy**: Metadata + S3 paths in RAG, full scripts in S3 (escher-library and escher-tenant-data buckets)
   - **S3 Structure**: Two folders - scripts/ (reusable library) and playbooks/ (orchestration files)
+  - **Scripts Embedded in Response**: Client receives scripts in API payload, does NOT download from S3
+  - **Parameter Handling**: Merges extracted_parameters from Master Agent with playbook parameter definitions
+  - **Response**: Returns playbook with pre-filled parameters (from Master Agent) + placeholders (user must fill)
   - **Advanced Features**:
     - Nested sub-steps (1.1, 1.2, 1.3) with blocking behavior
     - Auto-remediation with LLM-powered error analysis (70-90% transient failures auto-fixed)
     - Resume capability for mid-execution failures
   - **Review Workflow**: User uploads → pending_review → approved/rejected → active (with state transitions)
   - **What's in RAG**: Metadata (name, description, keywords, status, execution stats) + S3 script paths (NOT full scripts)
-  - **Documentation**: [docs/03-server/agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md) (~3,684 lines, comprehensive)
+  - **Documentation**: [docs/03-server/agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md) (~4,637 lines, comprehensive)
 
 - **Classification Agent**: Intent recognition and routing
 - **Operations Agent**: Script generation from playbooks
@@ -260,12 +332,14 @@ These are **Rust crates** (like npm packages) used by both client and server:
 2. Create markdown file with clear heading structure
 3. Link from parent overview.md
 4. Update relevant diagrams if needed
+5. Validate architectural correctness (see checklist above)
 
 ### Documenting a New Component
 1. **Client components**: Add to [docs/02-client/](docs/02-client/)
 2. **Server agents**: Add to [docs/03-server/agents/](docs/03-server/agents/)
 3. **Server microservices**: Add to [docs/03-server/microservices/](docs/03-server/microservices/)
 4. Update integration/flow documentation if it affects request flow
+5. Verify agent responsibilities are correctly documented (especially parameter extraction)
 
 ### Documenting Module Interactions
 1. **Identify dependencies**: Which modules call which (e.g., Estate Scanner → Execution Engine + Storage Service)
@@ -279,9 +353,31 @@ These are **Rust crates** (like npm packages) used by both client and server:
 3. Reference diagram in markdown documentation
 4. Commit both source and exported files
 
+### Validating Documentation for Architectural Correctness
+
+When reviewing or creating documentation, check for these common errors:
+
+**Parameter Extraction**:
+- ❌ "Client extracts parameters" → ✅ "Master Agent extracts parameters"
+- ❌ "Client auto-fills parameters" → ✅ "Master Agent extracts, user manually fills placeholders"
+- ❌ "auto_fill_strategy" → ✅ "extraction_hint"
+
+**Script Delivery**:
+- ❌ "Client downloads scripts from S3" → ✅ "Scripts embedded in API response"
+- ❌ "Pre-signed URLs for scripts" → ✅ "Scripts in response payload"
+
+**Agent Responsibilities**:
+- ❌ "Playbook Agent extracts parameters" → ✅ "Playbook Agent receives extracted parameters from Master Agent"
+- ❌ "Client has LLM for parameter extraction" → ✅ "Client has NO LLM, only displays and executes"
+
+**Multi-Cloud**:
+- ❌ "AWS estate" (unless AWS-specific) → ✅ "cloud estate (AWS/Azure/GCP)"
+
 ## Cross-References
 
 - Main architecture: [architecture.md](architecture.md)
+- Product vision: [docs/01-overview/PRODUCT-VISION.md](docs/01-overview/PRODUCT-VISION.md)
+- Project summary: [PROJECT-SUMMARY.md](PROJECT-SUMMARY.md)
 - Client overview: [docs/02-client/overview.md](docs/02-client/overview.md)
 - Server overview: [docs/03-server/overview.md](docs/03-server/overview.md)
 - ADR index: [adr/README.md](adr/README.md)
@@ -302,3 +398,5 @@ These are **Rust crates** (like npm packages) used by both client and server:
 - When asked to document a new component, first understand where it fits in the client vs server dichotomy
 - The server side has significant depth - don't oversimplify it
 - Always maintain the 10,000-foot perspective
+- **CRITICAL**: Always verify architectural correctness, especially regarding parameter extraction flow
+- When in doubt about who does what, refer to the "Critical Architecture Corrections" section above
