@@ -496,82 +496,6 @@ A playbook consists of:
 
 ### 2. Parameters Structure
 
-```json
-{
-  "parameters": [
-    {
-      "name": "instance_id",
-      "type": "string",
-      "description": "RDS instance identifier",
-      "prompt": "Which RDS instance would you like to shut down?",
-      "required": true,
-      "default": null,
-      "validation": {
-        "pattern": "^[a-zA-Z][a-zA-Z0-9-]{0,62}$",
-        "min_length": 1,
-        "max_length": 63
-      },
-      "extraction_hint": {
-        "source": "user_estate",
-        "estate_query": {
-          "resource_type": "rds::instance",
-          "filters": {
-            "tags.environment": "production",
-            "state": "available"
-          }
-        },
-        "display_field": "name",
-        "value_field": "identifier"
-      }
-    },
-    {
-      "name": "snapshot_name",
-      "type": "string",
-      "description": "Name for the backup snapshot (optional)",
-      "prompt": "What would you like to name the snapshot? (leave blank for auto-generated name)",
-      "required": false,
-      "default": "auto-snapshot-{timestamp}",
-      "extraction_hint": {
-        "source": "generated",
-        "template": "weekend-shutdown-{instance_id}-{timestamp}"
-      }
-    },
-    {
-      "name": "skip_snapshot",
-      "type": "boolean",
-      "description": "Skip creating snapshot before shutdown",
-      "prompt": "Would you like to skip creating a snapshot? (not recommended for production)",
-      "required": false,
-      "default": false,
-      "validation": {
-        "warning_if_true": "Skipping snapshot is risky for production databases"
-      }
-    },
-    {
-      "name": "region",
-      "type": "string",
-      "description": "AWS region",
-      "prompt": "Which AWS region is the instance in?",
-      "required": true,
-      "extraction_hint": {
-        "source": "context",
-        "context_field": "resource.region"
-      }
-    },
-    {
-      "name": "dry_run",
-      "type": "boolean",
-      "description": "Simulate without making changes",
-      "prompt": "Would you like to run this in dry-run mode first?",
-      "required": false,
-      "default": false
-    }
-  ]
-}
-```
-
-### 2. Parameters Structure
-
 Parameters define what inputs the playbook needs. The `extraction_hint` field helps the **Master Agent** know where to look for values.
 
 ```json
@@ -2227,7 +2151,7 @@ The Master Agent extracts potential parameter values from:
 1. **Search**: Uses `action`, `cloud_provider`, `resource_types`, `keywords` for RAG search
 2. **Ranking**: Considers `use_case`, `filters`, `time_based` when ranking playbooks
 3. **Parameter Pre-filling**: Passes `extracted_parameters` to returned playbooks
-4. **Context Analysis**: LLM uses `user_context` to predict which parameters can be parameter extractioned
+4. **Context Analysis**: LLM uses `user_context` to predict which parameters can be extracted
 
 **Example: From User Query to Structured Input**
 
@@ -2531,7 +2455,7 @@ Return JSON array sorted by rank.
 **Client's Next Steps**:
 1. User reviews explain plans
 2. Selects preferred playbook (usually rank 1)
-3. Reviews/fills parameters (parameter extraction helps)
+3. Reviews/fills parameters (Master Agent extraction hints help)
 4. Execution Engine runs the script
 
 ---
@@ -4015,7 +3939,7 @@ Quality scores affect playbook ranking and user experience:
     "strengths": [
       "Excellent error handling with rollback strategy",
       "Comprehensive explain plan with clear risks and mitigations",
-      "Good parameter validation with parameter extraction strategies",
+      "Good parameter validation with extraction hint strategies",
       "Idempotent design - safe to retry",
       "Clear documentation and examples"
     ],
@@ -4077,7 +4001,7 @@ See [Playbook Best Practices - Validation Rules](playbook-best-practices.md#vali
 
 Key validations include:
 - **Metadata**: Required fields, format, length constraints
-- **Parameters**: Naming conventions, validation rules, parameter extraction strategies
+- **Parameters**: Naming conventions, validation rules, extraction hint strategies
 - **Scripts**: Error handling, idempotency, output format
 - **Documentation**: Explain plan completeness, risk documentation, rollback strategy
 - **Security**: No hardcoded credentials, input sanitization, permissions documented
