@@ -1,13 +1,13 @@
 # Estate Scanner Commands
 
 **Module**: `cloudops-estate-scanner`
-**Purpose**: Trigger AWS estate scans and monitor scan progress
+**Purpose**: Trigger multi-cloud estate scans (AWS/Azure/GCP) and monitor scan progress
 
 ---
 
 ## Overview
 
-The Estate Scanner discovers and catalogs all AWS resources across accounts, regions, and services. It provides:
+The Estate Scanner discovers and catalogs all cloud resources (AWS/Azure/GCP) across accounts, regions, and services. It provides:
 - Full estate scans
 - Incremental scans
 - Service-specific scans
@@ -37,9 +37,10 @@ async fn start_estate_scan(
 **TypeScript Usage**:
 ```typescript
 interface ScanConfig {
-  accounts: string[];  // AWS account IDs
-  regions: string[];   // AWS regions
-  services: string[];  // AWS services (e.g., 'ec2', 's3', 'rds')
+  cloudProvider: 'aws' | 'azure' | 'gcp';  // Cloud provider
+  accounts: string[];  // Account IDs (AWS), Subscription IDs (Azure), Project IDs (GCP)
+  regions: string[];   // Cloud regions
+  services: string[];  // Cloud services (e.g., 'ec2', 'compute', 'vm')
   scanType: 'full' | 'incremental' | 'quick';
   parallelism?: number;  // Number of concurrent scans (default: 5)
 }
@@ -51,12 +52,37 @@ interface ScanHandle {
   config: ScanConfig;
 }
 
-// Full estate scan
-const handle = await invoke<ScanHandle>('start_estate_scan', {
+// AWS Full estate scan
+const awsHandle = await invoke<ScanHandle>('start_estate_scan', {
   config: {
+    cloudProvider: 'aws',
     accounts: ['123456789012', '987654321098'],
     regions: ['us-east-1', 'us-west-2', 'eu-west-1'],
     services: ['ec2', 's3', 'rds', 'lambda', 'dynamodb'],
+    scanType: 'full',
+    parallelism: 10
+  }
+});
+
+// Azure Full estate scan
+const azureHandle = await invoke<ScanHandle>('start_estate_scan', {
+  config: {
+    cloudProvider: 'azure',
+    accounts: ['sub-12345', 'sub-67890'],  // Subscription IDs
+    regions: ['eastus', 'westus2', 'westeurope'],
+    services: ['vm', 'sql-database', 'blob-storage', 'functions', 'key-vault'],
+    scanType: 'full',
+    parallelism: 10
+  }
+});
+
+// GCP Full estate scan
+const gcpHandle = await invoke<ScanHandle>('start_estate_scan', {
+  config: {
+    cloudProvider: 'gcp',
+    accounts: ['my-project-123', 'my-project-456'],  // Project IDs
+    regions: ['us-central1', 'us-west1', 'europe-west1'],
+    services: ['compute-engine', 'cloud-sql', 'cloud-storage', 'cloud-functions'],
     scanType: 'full',
     parallelism: 10
   }
@@ -79,8 +105,8 @@ await listen('scan_complete', (event) => {
 
 **Errors**:
 - `"Invalid scan configuration: {error}"` - Configuration validation failed
-- `"No AWS credentials found"` - AWS credentials not configured
-- `"Account not accessible: {accountId}"` - Cannot access account
+- `"No cloud credentials found for {provider}"` - Cloud credentials not configured (AWS/Azure/GCP)
+- `"Account not accessible: {accountId}"` - Cannot access account/subscription/project
 - `"Failed to start scan: {error}"` - Scanner initialization failed
 
 ---
@@ -366,32 +392,51 @@ console.log(`Deleted ${deletedCount} scan records`);
 
 #### `get_supported_services`
 
-Get list of AWS services supported by the scanner.
+Get list of cloud services supported by the scanner (AWS/Azure/GCP).
 
 **Rust Signature**:
 ```rust
 #[tauri::command]
-async fn get_supported_services() -> Result<Vec<AWSService>, String>
+async fn get_supported_services(
+    cloud_provider: String
+) -> Result<Vec<CloudService>, String>
 ```
 
 **TypeScript Usage**:
 ```typescript
-interface AWSService {
-  id: string;          // e.g., 'ec2'
-  name: string;        // e.g., 'Amazon EC2'
-  category: string;    // e.g., 'Compute', 'Storage'
+interface CloudService {
+  id: string;          // e.g., 'ec2', 'vm', 'compute-engine'
+  name: string;        // e.g., 'Amazon EC2', 'Azure Virtual Machines', 'GCP Compute Engine'
+  cloudProvider: 'aws' | 'azure' | 'gcp';
+  category: string;    // e.g., 'Compute', 'Storage', 'Database'
   resourceTypes: string[];  // e.g., ['instance', 'volume', 'ami']
   scanDuration: number;     // Estimated seconds
 }
 
-const services = await invoke<AWSService[]>('get_supported_services');
+// Get AWS services
+const awsServices = await invoke<CloudService[]>('get_supported_services', {
+  cloudProvider: 'aws'
+});
+// Returns: ['ec2', 's3', 'rds', 'lambda', 'dynamodb', 'vpc', ...]
+
+// Get Azure services
+const azureServices = await invoke<CloudService[]>('get_supported_services', {
+  cloudProvider: 'azure'
+});
+// Returns: ['vm', 'sql-database', 'blob-storage', 'functions', 'key-vault', ...]
+
+// Get GCP services
+const gcpServices = await invoke<CloudService[]>('get_supported_services', {
+  cloudProvider: 'gcp'
+});
+// Returns: ['compute-engine', 'cloud-sql', 'cloud-storage', 'cloud-functions', ...]
 
 // Group by category
-const byCategory = services.reduce((acc, service) => {
+const byCategory = awsServices.reduce((acc, service) => {
   acc[service.category] = acc[service.category] || [];
   acc[service.category].push(service);
   return acc;
-}, {} as Record<string, AWSService[]>);
+}, {} as Record<string, CloudService[]>);
 ```
 
 ---

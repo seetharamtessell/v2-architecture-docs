@@ -7,13 +7,13 @@
 
 ## Executive Summary
 
-The **Escher Client** is a **Tauri-based desktop application** that provides a chat-driven interface for AWS cloud operations. It combines a React frontend with Rust backend modules to enable:
+The **Escher Client** is a **Tauri-based desktop application** that provides a chat-driven interface for multi-cloud operations (AWS, Azure, GCP). It combines a React frontend with Rust backend modules to enable:
 
-- 🏗️ **Local AWS Estate Management** - Sync and store AWS resources locally
+- 🏗️ **Local Cloud Estate Management** - Sync and store cloud resources (AWS/Azure/GCP) locally
 - 🔍 **Semantic Search** - Fast resource lookup using Qdrant vector DB
-- ⚡ **Secure Execution** - Run AWS CLI commands with user approval
+- ⚡ **Secure Execution** - Run cloud CLI commands (AWS/Azure/GCP) with user approval
 - 🎨 **Server-Driven UI** - Dynamic rendering with UI Rendering Engine and 30+ UI Components
-- 🔐 **Credential Security** - AWS credentials never leave the device
+- 🔐 **Credential Security** - Cloud credentials (AWS/Azure/GCP) never leave the device
 
 ---
 
@@ -41,13 +41,19 @@ The **Escher Client** is a **Tauri-based desktop application** that provides a c
                               ↕
 ┌─────────────────────────────────────────────────────────────┐
 │                      LOCAL STORAGE                          │
-│  • Qdrant Vector DB (estate search + chat context)          │
-│    - Chat: Dummy 1D vectors (filter-based access)           │
-│    - Estate: Real 384D vectors (semantic search)            │
-│  • OS Keychain (AWS credentials, encryption keys)           │
-│  • S3 (backup/restore)                                      │
+│  • Qdrant Vector DB (6-collection strategy, ~20-30 MB)      │
+│    1. Cloud Estate: Real 384D vectors (semantic search)     │
+│    2. Chat History: Dummy 1D vectors (filter-based)         │
+│    3. Executed Operations: Operation history                │
+│    4. Immutable Reports: Cost, audit, compliance            │
+│    5. Alerts & Events: Alert rules, auto-remediation        │
+│    6. User Playbooks: Real 384D vectors (user playbooks)    │
+│  • OS Keychain (cloud credentials, encryption keys)         │
+│  • S3/Blob/GCS (backup/restore)                             │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**Multi-Cloud Note**: This documentation uses AWS, Azure, and GCP examples throughout. All features support multi-cloud operations through the `cloud_provider` field in resource metadata and API requests.
 
 ---
 
@@ -205,11 +211,15 @@ The client's backend is organized into **5 focused Rust crates**:
 **Purpose**: Local data persistence with RAG capabilities
 
 **Features**:
-- **Single Qdrant Instance**: Embedded mode (~20-30 MB), dual collection strategy
-- **Estate Storage**: Real vector embeddings (384D) for semantic search
-- **Chat History**: Dummy vectors (1D) for efficient context storage
-- **IAM Permissions**: Embedded with each AWS resource
-- **S3 Backup/Restore**: Automatic cloud backup via snapshots
+- **Single Qdrant Instance**: Embedded mode (~20-30 MB), 6-collection strategy
+- **6 RAG Collections**:
+  1. **Cloud Estate Inventory**: Real 384D vectors for semantic search + IAM permissions
+  2. **Chat History**: Dummy 1D vectors for efficient filter-based access
+  3. **Executed Operations**: Operation history and audit trail
+  4. **Immutable Reports**: Cost reports, audit logs, compliance (daily sync)
+  5. **Alerts & Events**: Alert rules, scan results, auto-remediation settings
+  6. **User Playbooks**: Real 384D vectors for user-created playbooks with full scripts
+- **S3/Blob/GCS Backup**: Automatic cloud backup via snapshots
 - **Encryption**: AES-256-GCM for sensitive data
 - **Point Management**: Deterministic IDs prevent duplicates
 
@@ -231,21 +241,19 @@ upload_to_s3(&snapshot) -> Result<()>
 restore_from_s3(collection, date) -> Result<()>
 ```
 
-**Collection Strategy**:
-- **chat_history**: 1D dummy vectors, filter-based access, immutable messages
-- **cloud_estate**: 384D real vectors, semantic search + filters, deterministic point IDs
+**Collection Strategy** (6 Collections):
 
-**Documentation** (9 files):
-- [README](modules/storage-service/README.md) - Overview
-- [Architecture](modules/storage-service/architecture.md)
-- [Collections](modules/storage-service/collections.md) - Chat & Estate schemas
-- [Operations](modules/storage-service/operations.md) - CRUD APIs
-- [API](modules/storage-service/api.md) - Complete Rust API
-- [Encryption](modules/storage-service/encryption.md) - AES-256-GCM
-- [Point Management](modules/storage-service/point-management.md) - ID strategies
-- [Backup/Restore](modules/storage-service/backup-restore.md) - S3 snapshots
-- [Configuration](modules/storage-service/configuration.md)
-- [Testing](modules/storage-service/testing.md)
+**Collections with Real 384D Vectors** (Semantic Search):
+1. **cloud_estate**: Semantic search + filters, deterministic point IDs, IAM permissions
+2. **user_playbooks**: Semantic search for user-created playbooks
+
+**Collections with Dummy 1D Vectors** (Filter-Based Access):
+3. **chat_history**: Filter-based access, immutable messages, random UUIDs
+4. **executed_operations**: Filter by user/date/status, operation audit trail
+5. **immutable_reports**: Filter by report type/date, cost/audit/compliance
+6. **alerts_events**: Filter by severity/type/status, alert rules + scan results
+
+**Documentation** - See [/docs/04-services/storage-service/](../../04-services/storage-service/) for complete documentation
 
 ---
 

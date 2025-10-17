@@ -9,12 +9,69 @@
 ## Overview
 
 The Request Builder module will handle:
-- Enriching user queries with context from estate data
+- Enriching user queries with context from cloud estate data (AWS/Azure/GCP)
 - Preparing requests for server communication
 - Formatting chat messages with relevant metadata
 - Adding policy constraints to requests
 
 **Note**: This module is pending design. The commands below are preliminary and subject to change.
+
+---
+
+## Important: Parameter Extraction vs Context Enrichment
+
+**Critical Distinction**: The Request Builder (client-side) does NOT extract parameters from user queries. Parameter extraction is performed server-side by the Master Agent (LLM).
+
+### What Request Builder Does (Client-Side)
+1. **Context Enrichment**: Adds relevant cloud resource context
+   - User query: "Stop RDS database db-prod-01"
+   - Adds: Resource metadata for "db-prod-01" (NO credentials)
+   - Adds: IAM permissions for current user
+   - Adds: Policy constraints (allowed/blocked operations)
+   - Adds: Recent conversation history
+
+2. **Request Formatting**: Packages data for server
+   - User query (unchanged)
+   - Enriched context (resource summaries, NOT full data)
+   - Conversation metadata (user ID, timestamp)
+
+### What Master Agent Does (Server-Side)
+1. **Parameter Extraction**: LLM-powered parsing
+   - Receives: User query + enriched context from Request Builder
+   - Extracts: `{resource_id: "db-prod-01", operation: "stop", service: "rds", cloud_provider: "aws"}`
+   - Sends to Playbook Agent: Structured JSON with extracted parameters
+
+2. **Intent Recognition**: Understands user goal
+   - Classifies intent (query, operation, recommendation, troubleshooting)
+   - Routes to appropriate server agent
+
+### Data Flow Summary
+
+```
+User Query
+    ↓
+Request Builder (Client)  ← Adds context (NO parameter extraction)
+    ↓
+Master Agent (Server LLM) ← Extracts parameters
+    ↓
+Playbook Agent (Server)   ← Receives structured JSON
+    ↓
+Client                    ← Receives ready-to-execute playbook
+```
+
+### Why This Matters
+- **Request Builder**: Enriches context, does NOT extract parameters
+- **Master Agent**: LLM-powered parameter extraction (server-side only)
+- **Playbook Agent**: Receives clean, structured data (NOT raw user query)
+
+This separation ensures:
+- Client remains lightweight (no LLM needed locally)
+- Server LLM handles complex natural language parsing
+- Playbook Agent works with structured, validated data
+
+For more details, see:
+- [Master Agent Documentation](../../03-server/agents/master-agent.md) _(coming soon)_
+- [Playbook Agent Documentation](../../03-server/agents/playbook-agent.md)
 
 ---
 
@@ -41,7 +98,7 @@ interface EnrichedQuery {
   originalQuery: string;
   enrichedQuery: string;
   context: {
-    relevantResources?: AWSResource[];
+    relevantResources?: CloudResource[];  // Multi-cloud: AWS/Azure/GCP
     recentExecutions?: ExecutionRecord[];
     activePolicies?: AgentPolicy[];
     estateSummary?: EstateSummary;
@@ -50,6 +107,7 @@ interface EnrichedQuery {
     entities: string[];
     intent: string;
     confidence: number;
+    cloudProviders?: ('aws' | 'azure' | 'gcp')[];  // Detected cloud providers in query
   };
 }
 
@@ -210,7 +268,7 @@ interface ResolvedResource {
 
 interface AmbiguousReference {
   reference: string;
-  candidates: AWSResource[];   // Multiple matches
+  candidates: CloudResource[];  // Multiple matches from AWS/Azure/GCP
   reason: string;
 }
 

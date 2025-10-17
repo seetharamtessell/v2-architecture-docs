@@ -48,16 +48,17 @@ Authenticate user via AWS Cognito
 ## Flow 2: Estate Scanning
 
 ### Purpose
-Discover and index AWS resources across accounts/regions
+Discover and index cloud resources (AWS/Azure/GCP) across accounts/subscriptions/projects and regions
 
 ### Steps
 1. User navigates to Estate Scanner
-2. Selects accounts, regions, services to scan
-3. Clicks "Start Scan"
-4. Controller triggers Rust Estate Scanner
-5. Real-time progress updates displayed
-6. Scan completes, resources stored in Rust Storage Service
-7. Summary displayed
+2. Selects cloud provider (AWS/Azure/GCP)
+3. Selects accounts/subscriptions/projects, regions, services to scan
+4. Clicks "Start Scan"
+5. Controller triggers Rust Estate Scanner
+6. Real-time progress updates displayed
+7. Scan completes, resources stored in Rust Storage Service
+8. Summary displayed
 
 ### Components
 - **View**: EstateScanView, ScanProgressBar
@@ -93,7 +94,7 @@ View re-renders with progress
 ## Flow 3: Learning Center (Estate Status)
 
 ### Purpose
-View current state of AWS estate
+View current state of cloud estate (AWS/Azure/GCP)
 
 ### Steps
 1. User navigates to Learning Center (default landing page)
@@ -254,10 +255,10 @@ Real-time monitoring and notifications
 ## Flow 7: Ops Chat with Playbook Execution
 
 ### Purpose
-Interactive chat interface for AWS operations with full playbook execution lifecycle (Explain → Execute → Monitor)
+Interactive chat interface for cloud operations (AWS/Azure/GCP) with full playbook execution lifecycle (Explain → Execute → Monitor)
 
 ### Overview
-Ops Chat is the primary interface for AWS operations. Users can chat naturally, and when operations are needed, the server returns playbooks as enhanced UI components that can be explained, executed, and monitored—all within the chat interface.
+Ops Chat is the primary interface for cloud operations (AWS/Azure/GCP). Users can chat naturally, and when operations are needed, the server returns playbooks as enhanced UI components that can be explained, executed, and monitored—all within the chat interface.
 
 ---
 
@@ -325,7 +326,7 @@ When server sends a playbook as enhanced UI, the user enters the playbook execut
 - Loops through steps sequentially
 - For each step:
   - Calls ExecutionEngineService (Tauri)
-  - Rust Execution Engine runs AWS CLI command
+  - Rust Execution Engine runs cloud CLI command (AWS/Azure/GCP)
   - Real-time output streamed back via Tauri events
   - Step status updated (pending → running → completed/failed)
 
