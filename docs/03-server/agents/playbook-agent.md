@@ -141,25 +141,84 @@ The Playbook Agent is a **search-only service** that helps clients find and retr
 │    - Scripts EMBEDDED in steps                          │
 │    - Metadata for filtering                             │
 └─────────────────────────────────────────────────────────┘
+            ↑
             │
-            │ Search API Call
-            │ (POST /api/playbooks/search)
             │
-            │ Input: { intent, aws_context }
-            │ Output: Complete playbook JSON with embedded scripts
+┌─────────────────────────────────────────────────────────┐
+│                   CLIENT                                │
+│              (Desktop App)                              │
+│                                                          │
+│  User: "Stop my production RDS for weekend"            │
+│    ↓                                                     │
+│  Collects context:                                      │
+│    - Chat history                                       │
+│    - Local estate scan (RDS: prod-db-01 in us-east-1)  │
+│    - User preferences                                   │
+│    ↓                                                     │
+│  Sends to server →                                      │
+└─────────────────────────────────────────────────────────┘
+            │
+            │ POST /api/chat
+            │ { prompt, history, estate_context }
+            ↓
+┌─────────────────────────────────────────────────────────┐
+│                  MASTER AGENT (Server)                  │
+│                  (LLM Orchestrator)                     │
+│                                                          │
+│  1. Receives prompt + context                           │
+│  2. Does intent classification                          │
+│  3. EXTRACTS PARAMETERS from estate_context (LLM)       │
+│       - Sees RDS instance "prod-db-01"                  │
+│       - Extracts region "us-east-1"                     │
+│       - Understands "weekend" = scheduled shutdown      │
+│  4. Calls Playbook Agent with structured input →        │
+└─────────────────────────────────────────────────────────┘
+            │
+            │ Structured JSON:
+            │ {
+            │   action: "stop",
+            │   resource: "rds::instance",
+            │   extracted_parameters: {
+            │     instance_id: "prod-db-01",
+            │     region: "us-east-1"
+            │   },
+            │   estate_context: {...}
+            │ }
+            ↓
+┌─────────────────────────────────────────────────────────┐
+│              PLAYBOOK AGENT (Server)                    │
+│              (Search & Ranking)                         │
+│                                                          │
+│  1. Receives structured input from Master Agent         │
+│  2. Searches Qdrant for relevant playbooks              │
+│  3. LLM ranks candidates                                │
+│  4. Returns playbook with PREFILLED parameters ←        │
+└─────────────────────────────────────────────────────────┘
+            │
+            │ Response:
+            │ {
+            │   playbook_id: "stoprds-v2",
+            │   parameters: {
+            │     instance_id: "prod-db-01",  ← Already filled!
+            │     region: "us-east-1"          ← Already filled!
+            │   },
+            │   steps: [ {script: "#!/bin/bash..."} ]
+            │ }
             ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   CLIENT                                │
 │            (Execution Engine)                           │
 │                                                          │
-│  1. Receives complete playbook JSON                     │
-│  2. Resolves parameters from local AWS context          │
-│  3. Executes scripts locally (bash/python/node)         │
-│  4. Streams progress to user                            │
+│  1. Receives playbook with parameters ALREADY FILLED    │
+│  2. Shows user what will be executed                    │
+│  3. User confirms                                       │
+│  4. Executes scripts locally (bash/python/node)         │
+│  5. Streams progress to user                            │
 │                                                          │
 │  ✓ Has AWS credentials                                  │
 │  ✓ Runs on user's machine                               │
-│  ✓ No S3 access needed (scripts already embedded)       │
+│  ✓ No LLM access (parameters already extracted)         │
+│  ✓ No S3 access (scripts already embedded)              │
 └─────────────────────────────────────────────────────────┘
             ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -243,7 +302,7 @@ As a **server implementer**, you must build:
 As a **server implementer**, you do NOT need:
 
 - ❌ AWS execution engine (client does this)
-- ❌ Parameter resolution logic (client resolves from local context)
+- ❌ Parameter extraction from user context (Master Agent already did this)
 - ❌ S3 credential management for client (scripts are embedded in response)
 - ❌ Script validation/sandboxing (client responsibility)
 - ❌ WebSocket streaming (client handles progress streaming)
