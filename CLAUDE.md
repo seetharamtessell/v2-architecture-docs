@@ -12,7 +12,7 @@ This is the **v2-architecture-docs** repository - the single source of truth for
 2. **High-Level Focus**: Maintain the big picture view across the entire system ecosystem
 3. **Client-Server Separation**: The architecture has two distinct worlds:
    - **Client**: Tauri-based app with local cloud estate (AWS/Azure/GCP), Qdrant vector DB, and secure credential storage
-   - **Server**: Multi-agent system with microservices for operations intelligence (NO cloud credentials/estate stored)
+   - **Server**: Multi-agent system with services for operations intelligence (NO cloud credentials/estate stored)
 
 ## Architecture Overview
 
@@ -69,23 +69,21 @@ Client (executes scripts locally)
 
 ```
 docs/
+├── INDEX.md              # Main entry point (product specification, 479 lines)
 ├── 01-overview/          # System overview, key decisions, tech stack
 ├── 02-client/            # Client architecture (Tauri app)
-│   ├── overview.md       # Client architecture overview
+│   ├── INDEX.md          # Client-specific navigation (developer-first)
 │   ├── CLIENT-SUMMARY.md # Complete architecture summary with all UI
-│   ├── COMPLETION-STATUS.md # Progress tracking
 │   ├── modules/          # Client-specific modules
 │   │   ├── overview.md
 │   │   └── request-builder/      🔄 Next (0% - to be designed)
 │   ├── frontend/         # Frontend architecture (React + TypeScript)
-│   │   ├── README.md
 │   │   ├── mvc-architecture.md   ✅ Complete (MVC pattern)
 │   │   ├── user-flows.md         ✅ Complete (8 flows)
-│   │   ├── ui-components.md ✅ Complete (30+ presentation components)
-│   │   ├── ui-rendering-engine.md ✅ Complete (client-side orchestrator)
+│   │   ├── ui-components.md      ✅ Complete (30+ components)
+│   │   ├── ui-rendering-engine.md ✅ Complete (orchestrator)
 │   │   └── authentication-security.md ✅ Complete (Cognito + JWT)
 │   ├── tauri-integration/ # IPC Bridge (Frontend ↔ Rust)
-│   │   ├── README.md
 │   │   ├── commands-storage.md   ✅ Complete (25+ commands)
 │   │   ├── commands-execution.md ✅ Complete (15+ commands)
 │   │   ├── commands-estate-scanner.md ✅ Complete (15+ commands)
@@ -93,64 +91,84 @@ docs/
 │   │   ├── events-scan.md        ✅ Complete (6 events)
 │   │   ├── events-execution.md   ✅ Complete (6 events)
 │   │   └── events-system.md      ✅ Complete (8 events)
-│   └── ui-team-implementation/ ✅ NEW! Complete parallel dev guide (~22,700 lines, 6 files)
-│       ├── README.md             # Quick start + overview
-│       ├── 01-architecture.md    # MVC pattern, data flow (~4,800 lines)
-│       ├── 02-implementation-plan.md # 7 phases with examples (~5,200 lines)
-│       ├── 03-project-structure.md # Complete folder layout (~4,100 lines)
-│       ├── 04-mock-contracts.md  # TypeScript interfaces (~4,900 lines)
-│       └── 05-claude-prompts.md  # 25 ready-to-use prompts (~3,700 lines)
-├── 03-server/            # Server ecosystem (its own complex world)
+│   └── ui-team-implementation/   ✅ Complete parallel dev guide
+│       └── 05-claude-prompts.md  # 25 ready-to-use prompts
+├── 03-server/            # Server ecosystem
 │   ├── agents/           # Multi-agent system
-│   │   ├── overview.md
-│   │   ├── ui-agent.md           ✅ Complete (comprehensive) - Server-side UI intelligence
-│   │   └── playbook-agent.md     ✅ Complete (~4,637 lines) - LLM + RAG intelligence
-│   ├── microservices/    # Service-oriented architecture
-│   ├── data/             # Redis, Qdrant (playbooks), Git repo
-│   ├── infrastructure/   # Deployment, service mesh, scaling
-│   └── integration/      # APIs and external integrations
-├── 04-services/          # Shared services used by both client and server
-│   ├── storage-service/          ✅ Complete (~4,000 lines, 10 files)
-│   │   ├── architecture.md       # Overall design, components
-│   │   ├── api.md                # Complete Rust API reference
-│   │   ├── collections.md        # Qdrant schemas + IAM
-│   │   ├── configuration.md      # Config structure
-│   │   ├── encryption.md         # AES-256-GCM + Keychain
-│   │   ├── backup-restore.md     # S3 backup workflows
-│   │   ├── point-management.md   # ID strategies
-│   │   ├── initialization.md     # Setup and bootstrap
-│   │   ├── operations.md         # Code examples
-│   │   └── testing.md            # Testing strategies
-│   ├── execution-engine/         ✅ Complete (~6,000 lines, 9 files)
-│   ├── estate-scanner/           ✅ Complete (~3,000 lines, 4 files)
-│   ├── common/                   ✅ Complete (~650 lines, 1 file)
-│   └── playbook-service/         ✅ Complete (client-side playbook management)
+│   │   ├── ui-agent.md           ✅ Complete - Server-side UI intelligence
+│   │   └── playbook-agent.md     ✅ Complete (~4,637 lines)
+│   └── (microservices moved to 04-services/services/)
+├── 04-services/          # NEW STRUCTURE (October 2025)
+│   ├── libraries/        # Reusable Rust crates
+│   │   ├── common/               ✅ Complete (~650 lines)
+│   │   ├── storage-service/      ✅ Complete (~4,000 lines, 10 files)
+│   │   ├── execution-engine/     ✅ Complete (~6,000 lines, 9 files)
+│   │   └── estate-scanner/       ✅ Complete (~3,000 lines, 4 files)
+│   └── services/         # Running services (Rust/Go)
+│       ├── playbook-service/     ✅ Complete
+│       ├── api-gateway/          📋 Planned
+│       ├── auth-service/         📋 Planned
+│       ├── rag-service/          📋 Planned
+│       ├── script-generator/     📋 Planned
+│       ├── workflow-engine/      📋 Planned
+│       └── notification-service/ 📋 Planned
 ├── 05-flows/             # Request, sync, execution flows
 ├── 06-security/          # Security and privacy architecture
 ├── 07-data/              # Data models, schemas, API contracts
-└── 08-operations/        # Deployment, monitoring, DR
+├── 08-operations/        # Deployment, monitoring, DR
+└── meta/                 # Documentation metadata
+    └── CONTRIBUTING.md   # Contribution guidelines
 
 working-docs/             # Active design documents
-├── CLIENT-DESIGN-WORKING-DOC-V2.md   # Storage Service design
-├── CLIENT-MODULE-ARCHITECTURE.md     # Module overview
-├── MODULE-INTERACTION-ANALYSIS.md    # How modules communicate
-├── COMMON-TYPES-ANALYSIS.md          # Shared type definitions
-├── SESSION-SUMMARY.md                # Development session notes
-└── DOCS-STRUCTURE.md                 # Documentation plan
-
-reference/                # Reference implementations
-├── CONTEXT-MANAGEMENT-ARCHITECTURE.md # Node.js reference
-└── COMPARISON-NODE-VS-RUST-STORAGE.md # Design comparison
+adr/                      # Architecture Decision Records
+├── template.md
+└── 001-documentation-index-architecture.md  ✅ Accepted
 
 diagrams/
-├── system/               # Overall, client, server architecture diagrams
+├── system/               # Overall architecture diagrams
 ├── flows/                # Sequence and flow diagrams
-├── components/           # Service topology and integration maps
-└── source/               # Editable diagram sources (draw.io, mermaid, etc.)
-
-adr/                      # Architecture Decision Records
-repositories/             # Catalog of all related repositories
+└── components/           # Service topology maps
 ```
+
+## Recent Structural Changes (October 2025)
+
+### 04-services/ Reorganization
+
+**Important**: The `04-services/` folder structure was recently reorganized to distinguish between libraries and services:
+
+**Old Structure**:
+```
+04-services/
+├── common/
+├── storage-service/
+├── execution-engine/
+├── estate-scanner/
+└── playbook-service/
+```
+
+**New Structure** (Current):
+```
+04-services/
+├── libraries/          # Reusable Rust crates
+│   ├── common/
+│   ├── storage-service/
+│   ├── execution-engine/
+│   └── estate-scanner/
+└── services/           # Running services
+    └── playbook-service/
+```
+
+**Key Distinction**:
+- **Libraries** = Reusable Rust crates (compiled into applications)
+- **Services** = Running services (deployed as standalone processes)
+
+When referencing paths in documentation:
+- ✅ Use `04-services/libraries/storage-service/`
+- ❌ Not `04-services/storage-service/`
+
+### Deleted Folders
+
+- `03-server/microservices/` - Consolidated into `04-services/services/`
 
 ## Documentation Guidelines
 
@@ -158,10 +176,21 @@ repositories/             # Catalog of all related repositories
 
 1. **Focus on Architecture**: Describe component interactions, data flows, and system-level decisions
 2. **Avoid Implementation Details**: Don't document code structure, function signatures, or line-by-line logic
-3. **Server Complexity**: The server side is a complex ecosystem with multiple agents and microservices - give it proper depth
+3. **Server Complexity**: The server side is a complex ecosystem with multiple agents and services - give it proper depth
 4. **Maintain Separation**: Keep client and server concerns clearly separated
 5. **Update Diagrams**: When architecture changes, update both diagrams and their source files
 6. **Validate Architectural Correctness**: Always verify who does what (especially parameter extraction!)
+
+### Documentation Entry Points
+
+| Purpose | File | Audience |
+|---------|------|----------|
+| **Product Specification Index** | [docs/INDEX.md](docs/INDEX.md) | PM, architects, developers, AI (70% spec) |
+| **Comprehensive Narrative** | [PROJECT-SUMMARY.md](PROJECT-SUMMARY.md) | All audiences (998 lines deep dive) |
+| **Developer Navigation** | [docs/02-client/INDEX.md](docs/02-client/INDEX.md) | Frontend/backend developers |
+| **File Organization** | [STRUCTURE.md](STRUCTURE.md) | Contributors |
+| **Development Guidance** | CLAUDE.md (this file) | Developers, AI assistants |
+| **Contribution Guidelines** | [docs/meta/CONTRIBUTING.md](docs/meta/CONTRIBUTING.md) | All contributors |
 
 ### Document Quality Checklist
 
@@ -171,6 +200,7 @@ Before committing documentation changes, verify:
 - [ ] Correct terminology: "extraction_hint" not "auto_fill_strategy"
 - [ ] Multi-cloud context: "cloud estate" not "AWS estate" (unless AWS-specific)
 - [ ] Scripts embedded in response, not downloaded by client
+- [ ] Correct path references after 04-services/ reorganization
 - [ ] Consistent with [PROJECT-SUMMARY.md](PROJECT-SUMMARY.md) architecture
 
 ### When to Create ADRs
@@ -181,15 +211,17 @@ Create an Architecture Decision Record (ADR) for:
 - Security models
 - Data storage strategies
 - Integration approaches
+- Documentation structure decisions
 
 Use the [adr/template.md](adr/template.md) for consistency.
 
 ### Markdown Conventions
 
 - Use relative links between documentation files
-- Link to specific line numbers in [architecture.md](architecture.md) when referencing details
 - Include ASCII diagrams for flows and component interactions
 - Keep documentation hierarchical: overview → detail
+- Update [docs/INDEX.md](docs/INDEX.md) when adding/changing sections
+- Follow style guide in [docs/meta/CONTRIBUTING.md](docs/meta/CONTRIBUTING.md)
 
 ## Key Architecture Concepts
 
@@ -218,7 +250,10 @@ Use the [adr/template.md](adr/template.md) for consistency.
 - **Encryption**: AES-256-GCM with OS Keychain (macOS/Windows/Linux)
 - **Backup**: Auto S3 sync with configurable retention (7 days local, 30 days S3)
 
-### Client Module Architecture
+### Client Module Architecture (Libraries)
+
+**All libraries located in**: `docs/04-services/libraries/`
+
 - **Storage Service**: Single Qdrant instance, 6 RAG collections, IAM integration, encryption
 - **Execution Engine**: Pure Rust crate, Tokio + streaming, background execution
 - **Estate Scanner**: Thin orchestrator, pluggable scanners (AWS/Azure/GCP), IAM discovery, semantic embeddings
@@ -233,18 +268,7 @@ Use the [adr/template.md](adr/template.md) for consistency.
 - **Tauri Integration**: 70+ commands, 15+ events connecting React frontend to Rust backend
 - **Authentication**: AWS Cognito with JWT tokens stored in OS Keychain
 
-### UI Team Implementation Guide (Parallel Development Enabler)
-- **Purpose**: Enables UI team to build 100% independently without waiting for Platform or Server teams
-- **Approach**: Build with mocks first (MockTauriService, MockWebSocketService, MockAPIService), integrate later
-- **Contents**:
-  - Complete MVC architecture with data flow examples
-  - 7-phase implementation plan with code examples
-  - Complete project structure (folder layout, naming conventions)
-  - Mock contracts for all 70+ Tauri commands and WebSocket/HTTP APIs
-  - 25 ready-to-use Claude Code prompts for rapid development
-- **Strategy**: UI team builds full functional application with mock data, then swaps mocks for real implementations (zero controller changes needed)
-
-### Shared Services Architecture (docs/04-services)
+### Shared Services Architecture (docs/04-services/libraries/)
 
 These are **Rust crates** (like npm packages) used by both client and server:
 
@@ -269,11 +293,6 @@ These are **Rust crates** (like npm packages) used by both client and server:
   - Zero framework dependencies, just serde + chrono
   - Used by all other crates for type safety
 
-- **Playbook Service** (playbook-service crate):
-  - Client uses: Manage local playbooks with full scripts (encrypted in Qdrant)
-  - Server uses: Not used (server has Playbook Agent instead)
-  - Storage strategy: local_only, uploaded_for_review, uploaded_trusted, using_default
-
 **Key Insight**: Same Rust code, different deployment contexts. Client has full data + encryption, server has metadata + S3 references.
 
 ### Server Agent System
@@ -287,65 +306,70 @@ These are **Rust crates** (like npm packages) used by both client and server:
 
 - **UI Agent** (Server-Side Presentation Intelligence):
   - Transforms raw backend responses into structured UI specifications
-  - **Purpose**: Server-side intelligence that decides optimal UI presentation
-  - **Input**: Raw responses from other agents (Cost Agent, Analysis Agent, etc.)
-  - **Output**: Structured JSON with UI markers + dual outputs (UI mode + history digest)
-  - **Template vs Dynamic**: 20% fast templates (<200ms) vs 80% LLM-powered dynamic (<1.5s)
-  - **30+ Component Vocabulary**: Complete registry for dynamic UI generation
-  - **Dual Outputs**: UI mode (5 KB, full components) + history digest (300 bytes, 20x smaller for LLM context)
-  - **Key Benefit**: Makes frontend infinitely scalable - add visualizations without backend changes
-  - **Documentation**: [docs/03-server/agents/ui-agent.md](docs/03-server/agents/ui-agent.md)
+  - Template vs Dynamic: 20% fast templates (<200ms) vs 80% LLM-powered dynamic (<1.5s)
+  - 30+ Component Vocabulary for dynamic UI generation
+  - Dual Outputs: UI mode (5 KB, full components) + history digest (300 bytes, 20x smaller)
+  - Documentation: [docs/03-server/agents/ui-agent.md](docs/03-server/agents/ui-agent.md)
 
 - **Playbook Agent**: LLM + RAG intelligent playbook search and recommendation
   - **4-Step Intelligence Flow**: LLM Intent Understanding → RAG Vector Search → LLM Ranking & Reasoning → Package & Return
   - **CRITICAL INPUT**: Receives structured JSON from Master Agent with **parameters already extracted**
   - **Does NOT Extract Parameters**: Master Agent does this - Playbook Agent just searches and ranks
-  - **Normalized Storage Architecture**: Scripts and playbooks separated (database-style with foreign key references)
-  - **Three Playbook Types**: Pure Script (only script_refs), Pure Orchestration (only playbook_refs), Hybrid (mix of both)
-  - **Multi-Implementation Support**: Same script in bash/python/node/terraform/cloudformation - user chooses at runtime
-  - **orchestration.json Format**: Step sequences with external references (script_id + version, playbook_id + version)
-  - **Server-Side RAG**: Embedded Qdrant with `escher_library` (global) and `tenant_{id}_playbooks` (per-tenant) collections
-  - **LLM Integration**: Uses Claude/GPT for intent parsing and intelligent ranking with explanations
-  - **Playbook Lifecycle**: 10 status values (draft, ready, active, deprecated, archived, pending_review, approved, rejected, broken, needs_update)
-  - **Storage Strategy**: Metadata + S3 paths in RAG, full scripts in S3 (escher-library and escher-tenant-data buckets)
-  - **S3 Structure**: Two folders - scripts/ (reusable library) and playbooks/ (orchestration files)
+  - **Normalized Storage**: Scripts and playbooks separated (database-style with foreign key references)
+  - **Three Playbook Types**: Pure Script, Pure Orchestration, Hybrid
+  - **Multi-Implementation Support**: Same script in bash/python/node/terraform/cloudformation
+  - **10 Lifecycle States**: draft, ready, active, deprecated, archived, pending_review, approved, rejected, broken, needs_update
   - **Scripts Embedded in Response**: Client receives scripts in API payload, does NOT download from S3
-  - **Parameter Handling**: Merges extracted_parameters from Master Agent with playbook parameter definitions
-  - **Response**: Returns playbook with pre-filled parameters (from Master Agent) + placeholders (user must fill)
-  - **Advanced Features**:
-    - Nested sub-steps (1.1, 1.2, 1.3) with blocking behavior
-    - Auto-remediation with LLM-powered error analysis (70-90% transient failures auto-fixed)
-    - Resume capability for mid-execution failures
-  - **Review Workflow**: User uploads → pending_review → approved/rejected → active (with state transitions)
-  - **What's in RAG**: Metadata (name, description, keywords, status, execution stats) + S3 script paths (NOT full scripts)
-  - **Documentation**: [docs/03-server/agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md) (~4,637 lines, comprehensive)
+  - **Documentation**: [docs/03-server/agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md) (~4,637 lines)
 
-- **Classification Agent**: Intent recognition and routing
-- **Operations Agent**: Script generation from playbooks
-- **Validation Agent**: Feasibility and safety checks
-- **Risk Assessment Agent**: Risk scoring and approval requirements
+- **Other Agents**: Classification, Operations, Validation, Risk Assessment (design phase)
 
 ## Common Tasks
 
 ### Adding New Architecture Documentation
 1. Determine which section (01-overview, 02-client, 03-server, etc.)
 2. Create markdown file with clear heading structure
-3. Link from parent overview.md
-4. Update relevant diagrams if needed
-5. Validate architectural correctness (see checklist above)
+3. Link from parent overview.md or INDEX.md
+4. Update [docs/INDEX.md](docs/INDEX.md) if adding new section
+5. Update [STRUCTURE.md](STRUCTURE.md) if adding new files
+6. Validate architectural correctness (see checklist above)
 
 ### Documenting a New Component
-1. **Client components**: Add to [docs/02-client/](docs/02-client/)
-2. **Server agents**: Add to [docs/03-server/agents/](docs/03-server/agents/)
-3. **Server microservices**: Add to [docs/03-server/microservices/](docs/03-server/microservices/)
-4. Update integration/flow documentation if it affects request flow
-5. Verify agent responsibilities are correctly documented (especially parameter extraction)
 
-### Documenting Module Interactions
-1. **Identify dependencies**: Which modules call which (e.g., Estate Scanner → Execution Engine + Storage Service)
-2. **Document data contracts**: What types are passed between modules (use Common Types)
-3. **Update MODULE-INTERACTION-ANALYSIS.md**: Keep the interaction map current
-4. **Show async boundaries**: Clarify where async operations happen
+**Client Components**:
+- Add to [docs/02-client/](docs/02-client/)
+- If it's a Rust crate, also document in [docs/04-services/libraries/](docs/04-services/libraries/)
+
+**Server Agents**:
+- Add to [docs/03-server/agents/](docs/03-server/agents/)
+
+**Server Services**:
+- Add to [docs/04-services/services/](docs/04-services/services/)
+
+**Important**: After adding documentation:
+1. Update [docs/INDEX.md](docs/INDEX.md) with new section/component
+2. Update [STRUCTURE.md](STRUCTURE.md) with file references
+3. Verify agent responsibilities are correctly documented
+4. Check all relative path references work
+
+### Updating Path References
+
+After the 04-services/ reorganization, when updating documentation:
+
+**Find references** to old paths:
+```bash
+grep -r "04-services/storage-service" docs/
+grep -r "04-services/execution-engine" docs/
+grep -r "04-services/estate-scanner" docs/
+grep -r "04-services/common" docs/
+```
+
+**Replace with** new paths:
+- `04-services/storage-service/` → `04-services/libraries/storage-service/`
+- `04-services/execution-engine/` → `04-services/libraries/execution-engine/`
+- `04-services/estate-scanner/` → `04-services/libraries/estate-scanner/`
+- `04-services/common/` → `04-services/libraries/common/`
+- `04-services/playbook-service/` → `04-services/services/playbook-service/`
 
 ### Creating Diagrams
 1. Create source file in [diagrams/source/](diagrams/source/)
@@ -373,15 +397,22 @@ When reviewing or creating documentation, check for these common errors:
 **Multi-Cloud**:
 - ❌ "AWS estate" (unless AWS-specific) → ✅ "cloud estate (AWS/Azure/GCP)"
 
+**Path References** (After October 2025 reorganization):
+- ❌ `docs/04-services/storage-service/` → ✅ `docs/04-services/libraries/storage-service/`
+- ❌ `docs/03-server/microservices/` → ✅ `docs/04-services/services/` (folder deleted)
+
 ## Cross-References
 
 - Main architecture: [architecture.md](architecture.md)
 - Product vision: [docs/01-overview/PRODUCT-VISION.md](docs/01-overview/PRODUCT-VISION.md)
-- Project summary: [PROJECT-SUMMARY.md](PROJECT-SUMMARY.md)
-- Client overview: [docs/02-client/overview.md](docs/02-client/overview.md)
-- Server overview: [docs/03-server/overview.md](docs/03-server/overview.md)
-- ADR index: [adr/README.md](adr/README.md)
-- Repository catalog: [repositories/repos.md](repositories/repos.md)
+- Project summary: [PROJECT-SUMMARY.md](PROJECT-SUMMARY.md) (998 lines)
+- Product specification index: [docs/INDEX.md](docs/INDEX.md) (479 lines)
+- Client overview: [docs/02-client/CLIENT-SUMMARY.md](docs/02-client/CLIENT-SUMMARY.md)
+- Server agents overview: [docs/03-server/agents/](docs/03-server/agents/)
+- Shared libraries: [docs/04-services/libraries/](docs/04-services/libraries/)
+- Running services: [docs/04-services/services/](docs/04-services/services/)
+- ADR index: [adr/](adr/)
+- Contribution guidelines: [docs/meta/CONTRIBUTING.md](docs/meta/CONTRIBUTING.md)
 
 ## What NOT to Include
 
@@ -400,3 +431,5 @@ When reviewing or creating documentation, check for these common errors:
 - Always maintain the 10,000-foot perspective
 - **CRITICAL**: Always verify architectural correctness, especially regarding parameter extraction flow
 - When in doubt about who does what, refer to the "Critical Architecture Corrections" section above
+- After the October 2025 reorganization, use correct paths: `04-services/libraries/` and `04-services/services/`
+- When updating documentation, check [docs/meta/CONTRIBUTING.md](docs/meta/CONTRIBUTING.md) for standards
