@@ -10,6 +10,12 @@
 
 ## Main Documentation (`docs/`)
 
+**Entry Point**: **[docs/INDEX.md](docs/INDEX.md)** - Product & architecture specification index (479 lines)
+- 70% specification-focused (product/architecture)
+- 15% AI & code generators (links to planned prompts)
+- 15% developer navigation
+- Covers all 8 sections (01-overview through 08-operations)
+
 ### 01-overview/
 High-level architecture and product vision:
 - **[PRODUCT-VISION.md](docs/01-overview/PRODUCT-VISION.md)** - Complete product vision with deployment models
@@ -58,6 +64,15 @@ Data models, schemas, API contracts
 ### 08-operations/
 Deployment, monitoring, disaster recovery
 
+### meta/
+Documentation metadata and contribution guidelines:
+- **[CONTRIBUTING.md](docs/meta/CONTRIBUTING.md)** - How to contribute to documentation
+  - Adding new sections (09-xxx, 10-xxx)
+  - Maintaining docs/INDEX.md
+  - Documentation standards (status indicators, multi-cloud terminology, tables)
+  - Style guide (tone, format, examples)
+  - Review process
+
 ---
 
 ## Working Documents (`working-docs/`)
@@ -76,7 +91,13 @@ Resolved gap analyses:
 Reference implementations and comparisons
 
 ## Architecture Decision Records (`adr/`)
-ADR templates and records
+ADR templates and significant architectural decisions:
+- [template.md](adr/template.md) - ADR template for new decisions
+- **[001-documentation-index-architecture.md](adr/001-documentation-index-architecture.md)** - ✅ Accepted
+  - Documentation index structure decisions
+  - 7 key decisions (length, detail, audience, concepts, format, diagrams, indicators)
+  - Rationale and consequences
+  - Alternatives considered
 
 ## Diagrams (`diagrams/`)
 System, component, and flow diagrams
