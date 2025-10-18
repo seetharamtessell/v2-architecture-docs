@@ -99,17 +99,24 @@
 
 ### 🔄 03-server/ - Server System (60% Complete)
 
-#### Agents
+#### Agents (Organized by Category)
 
-| Agent | Status | Lines | Notes |
-|-------|--------|-------|-------|
-| agents/ui-agent.md | ✅ Complete | ~2,400 | Server-side UI intelligence |
-| agents/playbook-agent.md | ✅ Complete | ~4,637 | LLM + RAG with 4-step flow |
-| agents/master-agent.md | 📋 Pending | 0 | **Intent classification + parameter extraction** |
-| agents/classification-agent.md | 📋 Pending | 0 | Intent recognition & routing |
-| agents/operations-agent.md | 📋 Pending | 0 | Script generation from playbooks |
-| agents/validation-agent.md | 📋 Pending | 0 | Feasibility & safety checks |
-| agents/risk-assessment-agent.md | 📋 Pending | 0 | Risk scoring & approval requirements |
+**Structure**: `agents/` folder is organized into 4 categories:
+- `core/` - Request processing agents
+- `intelligence/` - LLM + RAG agents
+- `validation/` - Safety and risk agents
+- `presentation/` - UI generation agents
+
+| Agent | Category | Status | Lines | Notes |
+|-------|----------|--------|-------|-------|
+| presentation/ui-agent.md | Presentation | ✅ Complete | ~2,400 | Server-side UI intelligence |
+| intelligence/playbook-agent.md | Intelligence | ✅ Complete | ~4,637 | LLM + RAG with 4-step flow |
+| intelligence/playbook-best-practices.md | Intelligence | ✅ Complete | ~1,000 | Playbook development guide |
+| core/master-agent.md | Core | 📋 Pending | 0 | **Intent classification + parameter extraction** |
+| core/classification-agent.md | Core | 📋 Pending | 0 | Intent recognition & routing |
+| intelligence/operations-agent.md | Intelligence | 📋 Pending | 0 | Script generation from playbooks |
+| validation/validation-agent.md | Validation | 📋 Pending | 0 | Feasibility & safety checks |
+| validation/risk-assessment-agent.md | Validation | 📋 Pending | 0 | Risk scoring & approval requirements |
 
 #### Services (Moved to 04-services/services/)
 

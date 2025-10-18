@@ -94,9 +94,14 @@ docs/
 │   └── ui-team-implementation/   ✅ Complete parallel dev guide
 │       └── 05-claude-prompts.md  # 25 ready-to-use prompts
 ├── 03-server/            # Server ecosystem
-│   ├── agents/           # Multi-agent system
-│   │   ├── ui-agent.md           ✅ Complete - Server-side UI intelligence
-│   │   └── playbook-agent.md     ✅ Complete (~4,637 lines)
+│   ├── agents/           # Multi-agent system (organized by category)
+│   │   ├── core/                 # Request processing agents
+│   │   ├── intelligence/         # LLM + RAG agents
+│   │   │   ├── playbook-agent.md          ✅ Complete (~4,637 lines)
+│   │   │   └── playbook-best-practices.md ✅ Complete
+│   │   ├── validation/           # Safety and risk agents
+│   │   └── presentation/         # UI generation agents
+│   │       └── ui-agent.md       ✅ Complete - Server-side UI intelligence
 │   └── (microservices moved to 04-services/services/)
 ├── 04-services/          # NEW STRUCTURE (October 2025)
 │   ├── libraries/        # Reusable Rust crates
@@ -309,7 +314,7 @@ These are **Rust crates** (like npm packages) used by both client and server:
   - Template vs Dynamic: 20% fast templates (<200ms) vs 80% LLM-powered dynamic (<1.5s)
   - 30+ Component Vocabulary for dynamic UI generation
   - Dual Outputs: UI mode (5 KB, full components) + history digest (300 bytes, 20x smaller)
-  - Documentation: [docs/03-server/agents/ui-agent.md](docs/03-server/agents/ui-agent.md)
+  - Documentation: [docs/03-server/agents/presentation/ui-agent.md](docs/03-server/agents/presentation/ui-agent.md)
 
 - **Playbook Agent**: LLM + RAG intelligent playbook search and recommendation
   - **4-Step Intelligence Flow**: LLM Intent Understanding → RAG Vector Search → LLM Ranking & Reasoning → Package & Return
@@ -320,7 +325,7 @@ These are **Rust crates** (like npm packages) used by both client and server:
   - **Multi-Implementation Support**: Same script in bash/python/node/terraform/cloudformation
   - **10 Lifecycle States**: draft, ready, active, deprecated, archived, pending_review, approved, rejected, broken, needs_update
   - **Scripts Embedded in Response**: Client receives scripts in API payload, does NOT download from S3
-  - **Documentation**: [docs/03-server/agents/playbook-agent.md](docs/03-server/agents/playbook-agent.md) (~4,637 lines)
+  - **Documentation**: [docs/03-server/agents/intelligence/playbook-agent.md](docs/03-server/agents/intelligence/playbook-agent.md) (~4,637 lines)
 
 - **Other Agents**: Classification, Operations, Validation, Risk Assessment (design phase)
 
@@ -341,7 +346,11 @@ These are **Rust crates** (like npm packages) used by both client and server:
 - If it's a Rust crate, also document in [docs/04-services/libraries/](docs/04-services/libraries/)
 
 **Server Agents**:
-- Add to [docs/03-server/agents/](docs/03-server/agents/)
+- Add to appropriate category in [docs/03-server/agents/](docs/03-server/agents/)
+  - core/ - Request processing (master, classification)
+  - intelligence/ - LLM + RAG (playbook, operations)
+  - validation/ - Safety (validation, risk assessment)
+  - presentation/ - UI generation (ui-agent)
 
 **Server Services**:
 - Add to [docs/04-services/services/](docs/04-services/services/)
@@ -408,7 +417,7 @@ When reviewing or creating documentation, check for these common errors:
 - Project summary: [PROJECT-SUMMARY.md](PROJECT-SUMMARY.md) (998 lines)
 - Product specification index: [docs/INDEX.md](docs/INDEX.md) (479 lines)
 - Client overview: [docs/02-client/CLIENT-SUMMARY.md](docs/02-client/CLIENT-SUMMARY.md)
-- Server agents overview: [docs/03-server/agents/](docs/03-server/agents/)
+- Server agents overview: [docs/03-server/agents/](docs/03-server/agents/) (organized by category)
 - Shared libraries: [docs/04-services/libraries/](docs/04-services/libraries/)
 - Running services: [docs/04-services/services/](docs/04-services/services/)
 - ADR index: [adr/](adr/)
