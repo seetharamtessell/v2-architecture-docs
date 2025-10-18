@@ -181,27 +181,41 @@ The server is a **100% stateless AI system** that:
 
 ---
 
-### 04-services/ - Shared Services Specification
+### 04-services/ - Libraries & Services
 
 **Entry Point**: [04-services/](./04-services/)
 
-**What are Shared Services?**
+**What's in 04-services?**
 
-Reusable **Rust crates** used by both client and server:
+Contains **libraries** (reusable Rust crates) and **services** (running services):
+
+#### Libraries (Rust Crates)
+
+Reusable libraries used by both client and server:
 - Pure libraries with no framework dependencies
 - Type-safe, trait-based architecture
 - Well-tested with 80%+ coverage
-- Production-ready and battle-tested
 
-**Services**:
-
-| Service | Purpose | Status | Lines |
+| Library | Purpose | Status | Lines |
 |---------|---------|--------|-------|
-| [storage-service](./04-services/storage-service/) | Qdrant + RAG (6 collections), encryption (AES-256-GCM) | ✅ Complete | ~4,000 |
-| [execution-engine](./04-services/execution-engine/) | Async command execution, streaming output, background tasks | ✅ Complete | ~6,000 |
-| [estate-scanner](./04-services/estate-scanner/) | Multi-cloud resource discovery (AWS/Azure/GCP) | ✅ Complete | ~3,000 |
-| [common](./04-services/common/) | Shared data structures (cloud-agnostic types) | ✅ Complete | ~650 |
-| [playbook-service](./04-services/playbook-service/) | Playbook management and lifecycle | ✅ Complete | TBD |
+| [common](./04-services/libraries/common/) | Shared data structures (cloud-agnostic types) | ✅ Complete | ~650 |
+| [estate-scanner](./04-services/libraries/estate-scanner/) | Multi-cloud resource discovery (AWS/Azure/GCP) | ✅ Complete | ~3,000 |
+| [storage-service](./04-services/libraries/storage-service/) | Qdrant + RAG (6 collections), encryption (AES-256-GCM) | ✅ Complete | ~4,000 |
+| [execution-engine](./04-services/libraries/execution-engine/) | Async command execution, streaming output, background tasks | ✅ Complete | ~6,000 |
+
+#### Services
+
+Running services (Rust/Go):
+
+| Service | Purpose | Status |
+|---------|---------|--------|
+| [playbook-service](./04-services/services/playbook-service/) | Playbook management and lifecycle | ✅ Complete |
+| api-gateway | Entry point, routing, authentication | 📋 Planned |
+| auth-service | Authentication, tokens, access control | 📋 Planned |
+| rag-service | Vector search, embeddings, semantic matching | 📋 Planned |
+| script-generator | CLI script generation, multi-cloud support | 📋 Planned |
+| workflow-engine | Orchestration, state management, retry logic | 📋 Planned |
+| notification-service | Alerts, webhooks, event streaming | 📋 Planned |
 
 **Key Specifications**:
 

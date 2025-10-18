@@ -28,11 +28,11 @@ Read: [Architecture Overview](./architecture/overview.md) - 10,000-foot view of 
 **Focus**: Rust modules and Tauri integration
 
 1. [Modules Overview](./modules/overview.md) - Overview of all Rust crates
-2. **Detailed Module Docs** - Navigate to [/docs/04-services/](../04-services/) for:
-   - [Storage Service](../04-services/storage-service/) - Local data persistence + RAG
-   - [Execution Engine](../04-services/execution-engine/) - Command execution
-   - [Estate Scanner](../04-services/estate-scanner/) - Cloud resource discovery
-   - [Common Types](../04-services/common/) - Shared data structures
+2. **Detailed Module Docs** - Navigate to [/docs/04-services/libraries/](../04-services/libraries/) for:
+   - [Storage Service](../04-services/libraries/storage-service/) - Local data persistence + RAG
+   - [Execution Engine](../04-services/libraries/execution-engine/) - Command execution
+   - [Estate Scanner](../04-services/libraries/estate-scanner/) - Cloud resource discovery
+   - [Common Types](../04-services/libraries/common/) - Shared data structures
 3. [Integration Guide](./modules/integration-guide.md) - How frontend uses backend modules _(coming soon)_
 
 ---
@@ -115,7 +115,7 @@ Read: [Architecture Overview](./architecture/overview.md) - 10,000-foot view of 
 A: OS Keychain (macOS/Windows/Linux) - see [Architecture Overview](./architecture/overview.md)
 
 **Q: How does the client store cloud estate data?**
-A: Qdrant Vector DB (6-collection strategy) - see [Storage Service](../04-services/storage-service/)
+A: Qdrant Vector DB (6-collection strategy) - see [Storage Service](../04-services/libraries/storage-service/)
 
 **Q: Is this AWS-only?**
 A: No! Multi-cloud support for AWS/Azure/GCP - see [Architecture Overview](./architecture/overview.md)

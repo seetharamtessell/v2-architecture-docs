@@ -2,7 +2,7 @@
 
 The client is organized into separate, focused modules (pure Rust crates) for maintainability and reusability.
 
-**Important**: Most Rust modules have been promoted to **shared services** in [/docs/04-services/](../../04-services/). See below for navigation to detailed documentation.
+**Important**: Most Rust modules have been promoted to **shared libraries** in [/docs/04-services/libraries/](../../04-services/libraries/). See below for navigation to detailed documentation.
 
 ## Privacy-First Design
 
@@ -46,7 +46,7 @@ Client Application
 ### Storage Service
 **Crate**: `cloudops-storage-service` | **Status**: ✅ Complete
 
-**Documentation**: [/docs/04-services/storage-service/](../../04-services/storage-service/)
+**Documentation**: [/docs/04-services/libraries/storage-service/](../../04-services/libraries/storage-service/)
 
 Handles all local storage operations with 6-collection RAG strategy:
 
@@ -66,7 +66,7 @@ Handles all local storage operations with 6-collection RAG strategy:
 ### Execution Engine
 **Crate**: `cloudops-execution-engine` | **Status**: ✅ Complete
 
-**Documentation**: [/docs/04-services/execution-engine/](../../04-services/execution-engine/)
+**Documentation**: [/docs/04-services/libraries/execution-engine/](../../04-services/libraries/execution-engine/)
 
 Pure Rust crate for multi-cloud command execution:
 - **Tokio + Streaming** - Async, non-blocking with real-time output
@@ -80,7 +80,7 @@ Pure Rust crate for multi-cloud command execution:
 ### Estate Scanner
 **Crate**: `cloudops-estate-scanner` | **Status**: ✅ Complete
 
-**Documentation**: [/docs/04-services/estate-scanner/](../../04-services/estate-scanner/)
+**Documentation**: [/docs/04-services/libraries/estate-scanner/](../../04-services/libraries/estate-scanner/)
 
 Thin orchestrator for multi-cloud resource discovery and enrichment (AWS/Azure/GCP):
 - **Thin Orchestrator** - Coordinates Execution Engine + Storage Service
@@ -100,7 +100,7 @@ Thin orchestrator for multi-cloud resource discovery and enrichment (AWS/Azure/G
 ### Common Types
 **Crate**: `cloudops-common` | **Status**: ✅ Complete
 
-**Documentation**: [/docs/04-services/common/](../../04-services/common/)
+**Documentation**: [/docs/04-services/libraries/common/](../../04-services/libraries/common/)
 
 Shared types and utilities used across all client modules:
 - **Pure Data Structures** - No business logic, zero framework dependencies

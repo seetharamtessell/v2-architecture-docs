@@ -2553,7 +2553,7 @@ Every playbook has a **status** field that controls its behavior in search, rank
     ↓
 ┌─────────┐
 │ active  │ ← All Escher playbooks start as active
-└─────────┘
+└─���───────┘
     │
     ├───→ (New version)
     │     ┌──────────────┐
@@ -4482,8 +4482,8 @@ This playbook would receive a quality score of **95+/100** and be featured in se
 
 - **[Playbook Best Practices](playbook-best-practices.md)** - Complete guide for writing high-quality playbooks
 - [Playbook Service (Client)](../../04-services/playbook-service/README.md) - Client-side playbook management
-- [Storage Service](../../04-services/storage-service/README.md) - RAG module used by agent
-- [Storage Service Collections](../../04-services/storage-service/collections.md) - user_playbooks schema
+- [Storage Service](../../04-services/libraries/storage-service/README.md) - RAG module used by agent
+- [Storage Service Collections](../../04-services/libraries/storage-service/collections.md) - user_playbooks schema
 ---
 
 ## Appendix: Implementation Details

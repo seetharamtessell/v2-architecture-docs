@@ -253,7 +253,7 @@ restore_from_s3(collection, date) -> Result<()>
 5. **immutable_reports**: Filter by report type/date, cost/audit/compliance
 6. **alerts_events**: Filter by severity/type/status, alert rules + scan results
 
-**Documentation** - See [/docs/04-services/storage-service/](../../04-services/storage-service/) for complete documentation
+**Documentation** - See [/docs/04-services/libraries/storage-service/](../../04-services/libraries/storage-service/) for complete documentation
 
 ---
 

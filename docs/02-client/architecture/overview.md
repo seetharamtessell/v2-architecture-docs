@@ -46,15 +46,15 @@ The client is organized into separate, focused modules:
 
 ### [Modules](../modules/) (Rust Crates)
 
-**Note**: Most Rust modules have been promoted to shared services in [/docs/04-services/](../../04-services/). See [Modules Overview](../modules/overview.md) for navigation.
+**Note**: Most Rust modules have been promoted to shared libraries in [/docs/04-services/libraries/](../../04-services/libraries/). See [Modules Overview](../modules/overview.md) for navigation.
 
 | Module | Status | Documentation Location |
 |--------|--------|----------------------|
-| **[Storage Service](../../04-services/storage-service/)** | ✅ Complete | 6-collection RAG strategy, S3/Blob/GCS backup (9 docs) |
-| **[Execution Engine](../../04-services/execution-engine/)** | ✅ Complete | Command execution with Tokio + Streaming (9 docs) |
-| **[Estate Scanner](../../04-services/estate-scanner/)** | ✅ Complete | Multi-cloud resource discovery (AWS/Azure/GCP) (4 docs) |
+| **[Storage Service](../../04-services/libraries/storage-service/)** | ✅ Complete | 6-collection RAG strategy, S3/Blob/GCS backup (9 docs) |
+| **[Execution Engine](../../04-services/libraries/execution-engine/)** | ✅ Complete | Command execution with Tokio + Streaming (9 docs) |
+| **[Estate Scanner](../../04-services/libraries/estate-scanner/)** | ✅ Complete | Multi-cloud resource discovery (AWS/Azure/GCP) (4 docs) |
 | **[Request Builder](../modules/request-builder/)** | ⚠️ Design | Context enrichment, Server communication (pending) |
-| **[Common Types](../../04-services/common/)** | ✅ Complete | Shared data structures across modules (1 doc) |
+| **[Common Types](../../04-services/libraries/common/)** | ✅ Complete | Shared data structures across modules (1 doc) |
 
 ### [Frontend](../frontend/) (React + TypeScript)
 
